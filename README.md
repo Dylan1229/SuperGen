@@ -16,7 +16,7 @@ A unified framework for multi-GPU distributed ultra-high-resolution video genera
 Clone the repository:
 
 ```bash
-git clone https://github.com/your-org/SuperGen.git
+git clone https://github.com/Dylan1229/SuperGen.git
 cd SuperGen
 ```
 
