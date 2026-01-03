@@ -1,0 +1,318 @@
+[
+    {
+        "prompt_en": "Colorful buildings on the seaside cliffs",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "Colorful buildings on the seaside cliffs.jpg"
+    },
+    {
+        "prompt_en": "the sun is shining through the trees near a waterfall, camera tilts down",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "the sun is shining through the trees near a waterfall.jpg"
+    },
+    {
+        "prompt_en": "a group of statues on the side of a building, camera zooms in",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "a group of statues on the side of a building.jpg"
+    },
+    {
+        "prompt_en": "two people in a canoe on a lake with mountains in the background",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "two people in a canoe on a lake with mountains in the background.jpg"
+    },
+    {
+        "prompt_en": "a chair in a room next to some drawings",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "a chair in a room next to some drawings.jpg"
+    },
+    {
+        "prompt_en": "an art gallery with paintings on the walls, camera tilts down",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "indoor",
+        "image_name": "an art gallery with paintings on the walls.jpg"
+    },
+    {
+        "prompt_en": "fireworks in the night sky over a city, camera pans left",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "fireworks in the night sky over a city.jpg"
+    },
+    {
+        "prompt_en": "a young girl smelling a pink flower",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a young girl smelling a pink flower.jpg"
+    },
+    {
+        "prompt_en": "a group of statues on the side of a building, camera tilts up",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "a group of statues on the side of a building.jpg"
+    },
+    {
+        "prompt_en": "a man sitting on steps playing an acoustic guitar",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a man sitting on steps playing an acoustic guitar.jpg"
+    },
+    {
+        "prompt_en": "a close-up view of a sea fan in the water, camera tilts down",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "abstract",
+        "image_name": "a close-up view of a sea fan in the water.jpg"
+    },
+    {
+        "prompt_en": "a woman carrying a bundle of plants over their head",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a woman carrying a bundle of plants over their head.jpg"
+    },
+    {
+        "prompt_en": "a blue and white smoke is swirly in the dark",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "abstract",
+        "image_name": "a blue and white smoke is swirly in the dark.jpg"
+    },
+    {
+        "prompt_en": "the golden gate bridge in san franscisco is lit up by the setting sun, camera static",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "the golden gate bridge in san franscisco is lit up by the setting sun.jpg"
+    },
+    {
+        "prompt_en": "an art gallery with paintings on the walls, camera tilts up",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "indoor",
+        "image_name": "an art gallery with paintings on the walls.jpg"
+    },
+    {
+        "prompt_en": "a room filled with books and teddy bears",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "a room filled with books and teddy bears.jpg"
+    },
+    {
+        "prompt_en": "a red bus driving down a snowy street at night, camera pans left",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "a red bus driving down a snowy street at night.jpg"
+    },
+    {
+        "prompt_en": "an aerial view of a group of islands in the middle of a lake",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "an aerial view of a group of islands in the middle of a lake.jpg"
+    },
+    {
+        "prompt_en": "an aerial view of a curvy road in the middle of a forest",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "an aerial view of a curvy road in the middle of a forest.jpg"
+    },
+    {
+        "prompt_en": "a house with snow on the ground, camera zooms out",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "a house with snow on the ground.jpg"
+    },
+    {
+        "prompt_en": "a city street at night during a snow storm, camera zooms out",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "a city street at night during a snow storm.jpg"
+    },
+    {
+        "prompt_en": "a man riding a bike down a street",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a man riding a bike down a street.jpg"
+    },
+    {
+        "prompt_en": "a tiger walking on a dirt path in the woods",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a tiger walking on a dirt path in the woods.jpg"
+    },
+    {
+        "prompt_en": "a chair in a room next to some drawings, camera tilts down",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "indoor",
+        "image_name": "a chair in a room next to some drawings.jpg"
+    },
+    {
+        "prompt_en": "a foggy landscape with trees and hills in the distance, camera zooms in",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "a foggy landscape with trees and hills in the distance.jpg"
+    },
+    {
+        "prompt_en": "a room filled with books and teddy bears, camera static",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "indoor",
+        "image_name": "a room filled with books and teddy bears.jpg"
+    },
+    {
+        "prompt_en": "an aerial view of a small town on the edge of the ocean, camera pans right",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "an aerial view of a small town on the edge of the ocean.jpg"
+    },
+    {
+        "prompt_en": "a woman is making bread in an oven",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a woman is making bread in an oven.jpg"
+    },
+    {
+        "prompt_en": "a toad is sitting on top of some moss",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a toad is sitting on top of some moss.jpg"
+    },
+    {
+        "prompt_en": "an older woman is drinking a bottle of water",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "an older woman is drinking a bottle of water.jpg"
+    }
+]

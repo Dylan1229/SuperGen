@@ -1,0 +1,15 @@
+diffusers==0.33.1
+accelerate==1.7.0
+transformers==4.46.2
+numpy==1.26.0
+torch==2.5.1
+torchvision==0.20.1
+sentencepiece==0.2.0
+SwissArmyTransformer==0.4.12
+gradio==5.31.0
+imageio==2.37.0
+imageio-ffmpeg==0.6.0
+openai==1.82.1
+moviepy==2.2.1
+scikit-video==1.1.11
+pydantic==2.11.5

@@ -1,0 +1,9 @@
+output/ 
+# scripts/
+__pycache__
+*/ckpts/
+*egg-info
+
+test
+/*.log
+/*.err

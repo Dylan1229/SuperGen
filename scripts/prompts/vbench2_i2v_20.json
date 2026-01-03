@@ -1,0 +1,212 @@
+[
+    {
+        "prompt_en": "a painting of a cloudy sky next to an easel, camera pans right",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "indoor",
+        "image_name": "a painting of a cloudy sky next to an easel.jpg"
+    },
+    {
+        "prompt_en": "A black and white abstract video featuring mesmerizing bubbles",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "abstract",
+        "image_name": "A black and white abstract video featuring mesmerizing bubbles.jpg"
+    },
+    {
+        "prompt_en": "a church sits on top of a hill under a cloudy sky, camera zooms in",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "a church sits on top of a hill under a cloudy sky.jpg"
+    },
+    {
+        "prompt_en": "two men riding bikes down a road near a forest",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "multiple-human",
+        "image_name": "two men riding bikes down a road near a forest.jpg"
+    },
+    {
+        "prompt_en": "a sandy beach with a wooden pier in the water, camera tilts up",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "a sandy beach with a wooden pier in the water.jpg"
+    },
+    {
+        "prompt_en": "two people scuba diving in the ocean",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "multiple-human",
+        "image_name": "two people scuba diving in the ocean.jpg"
+    },
+    {
+        "prompt_en": "a pagoda sits on top of a mountain in japan, camera tilts up",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "a pagoda sits on top of a mountain in japan.jpg"
+    },
+    {
+        "prompt_en": "a man carrying a woman on his back in a field",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "multiple-human",
+        "image_name": "a man carrying a woman on his back in a field.jpg"
+    },
+    {
+        "prompt_en": "a snow covered street",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "a snow covered street.jpg"
+    },
+    {
+        "prompt_en": "a room filled with paintings and statues, camera zooms in",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "indoor",
+        "image_name": "a room filled with paintings and statues.jpg"
+    },
+    {
+        "prompt_en": "a large wave in the ocean with a lot of spray coming from it, camera tilts up",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "a large wave in the ocean with a lot of spray coming from it.jpg"
+    },
+    {
+        "prompt_en": "a bridge that is over a body of water",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "a bridge that is over a body of water.jpg"
+    },
+    {
+        "prompt_en": "A little girl, lost in thought, is quietly sitting on the bus",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "A little girl, lost in thought, is quietly sitting on the bus.jpg"
+    },
+    {
+        "prompt_en": "A red sports car driving through sand, kicking up a large amount of dust",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "transportation",
+        "image_name": "A red sports car driving through sand, kicking up a large amount of dust.jpg"
+    },
+    {
+        "prompt_en": "a living room with hardwood floors and a white couch, camera pans left",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "indoor",
+        "image_name": "a living room with hardwood floors and a white couch.jpg"
+    },
+    {
+        "prompt_en": "a sandy beach with a wooden pier in the water, camera pans left",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "a sandy beach with a wooden pier in the water.jpg"
+    },
+    {
+        "prompt_en": "a pagoda sits on top of a mountain in japan, camera static",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "a pagoda sits on top of a mountain in japan.jpg"
+    },
+    {
+        "prompt_en": "a mountain with snow on it",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "a mountain with snow on it.jpg"
+    },
+    {
+        "prompt_en": "a modern living room with wood floors and a tv",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "a modern living room with wood floors and a tv.jpg"
+    },
+    {
+        "prompt_en": "a city street at night during a snow storm, camera pans right",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "architecture",
+        "image_name": "a city street at night during a snow storm.jpg"
+    }
+]

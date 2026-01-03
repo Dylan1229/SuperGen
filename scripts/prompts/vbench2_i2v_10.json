@@ -1,0 +1,108 @@
+[
+    {
+        "prompt_en": "an aerial view of a snowy road in a forest, camera tilts up",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "an aerial view of a snowy road in a forest.jpg"
+    },
+    {
+        "prompt_en": "sun rays shining through clouds over a lake",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "sun rays shining through clouds over a lake.jpg"
+    },
+    {
+        "prompt_en": "the sun is shining through the trees near a waterfall, camera static",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "the sun is shining through the trees near a waterfall.jpg"
+    },
+    {
+        "prompt_en": "a dog carrying a soccer ball in its mouth",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a dog carrying a soccer ball in its mouth.jpg"
+    },
+    {
+        "prompt_en": "an aerial view of a group of islands in the middle of a lake, camera zooms out",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "an aerial view of a group of islands in the middle of a lake.jpg"
+    },
+    {
+        "prompt_en": "a close-up view of the flames of a fireplace, camera tilts up",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "a close-up view of the flames of a fireplace.jpg"
+    },
+    {
+        "prompt_en": "a white and blue airplane flying in the sky",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "transportation",
+        "image_name": "a white and blue airplane flying in the sky.jpg"
+    },
+    {
+        "prompt_en": "a woman wearing a hijab reading a book on the beach",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a woman wearing a hijab reading a book on the beach.jpg"
+    },
+    {
+        "prompt_en": "the dome of the rock in jerusalem",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "the dome of the rock in jerusalem.jpg"
+    },
+    {
+        "prompt_en": "a group of people standing on top of a green hill, camera zooms out",
+        "dimension": [
+            "camera_motion"
+        ],
+        "image_type": "scenery",
+        "image_name": "a group of people standing on top of a green hill.jpg"
+    }
+]
