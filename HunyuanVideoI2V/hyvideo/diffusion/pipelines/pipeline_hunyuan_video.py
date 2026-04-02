@@ -1,21 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-#
 # Modified from diffusers==0.29.2
-#
-# ==============================================================================
 import inspect
 import json
 import os, time
@@ -120,8 +103,7 @@ def get_1d_rotary_pos_embed_riflex(
 
 def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     """
-    Rescale `noise_cfg` according to `guidance_rescale`. Based on findings of [Common Diffusion Noise Schedules and
-    Sample Steps are Flawed](https://arxiv.org/pdf/2305.08891.pdf). See Section 3.4
+    Rescale `noise_cfg` according to `guidance_rescale`.
     """
     std_text = noise_pred_text.std(
         dim=list(range(1, noise_pred_text.ndim)), keepdim=True
@@ -551,7 +533,6 @@ class HunyuanVideoPipeline(DiffusionPipeline):
     def prepare_extra_func_kwargs(self, func, kwargs):
         # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
-        # eta corresponds to η in DDIM paper: https://arxiv.org/abs/2010.02502
         # and should be between [0, 1]
         extra_step_kwargs = {}
 
@@ -778,9 +759,9 @@ class HunyuanVideoPipeline(DiffusionPipeline):
         if len(rope_sizes) != target_ndim:
             rope_sizes = [1] * (target_ndim - len(rope_sizes)) + rope_sizes  # Pad time axis
     
-        # 20250316 pftq: Add RIFLEx logic for > 192 frames
+        # RIFLEx logic for > 192 frames
         L_test = rope_sizes[0]  # Latent frames
-        L_train = 25  # Training length from HunyuanVideo
+        L_train = 25  # Training sequence length
         actual_num_frames = video_length  # Use input video_length directly
     
         # Use transformer config instead of model
@@ -828,7 +809,7 @@ class HunyuanVideoPipeline(DiffusionPipeline):
             freqs_sin = torch.cat([f[1] for f in freqs], dim=1)
             logger.debug(f"freqs_cos shape: {freqs_cos.shape}, device: {freqs_cos.device}")
         else:
-            # 20250316 pftq: Original code for <= 192 frames
+            # Original code for <= 192 frames
             logger.debug(f"actual_num_frames = {actual_num_frames} <= 192, using original RoPE")
             freqs_cos, freqs_sin = get_nd_rotary_pos_embed(
                 rope_dim_list,
@@ -853,9 +834,7 @@ class HunyuanVideoPipeline(DiffusionPipeline):
     def clip_skip(self):
         return self._clip_skip
 
-    # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-    # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
-    # corresponds to doing no classifier free guidance.
+    # guidance_scale = 1 corresponds to doing no classifier free guidance.
     @property
     def do_classifier_free_guidance(self):
         # return self._guidance_scale > 1 and self.transformer.config.time_cond_proj_dim is None
@@ -952,7 +931,7 @@ class HunyuanVideoPipeline(DiffusionPipeline):
             num_videos_per_prompt (`int`, *optional*, defaults to 1):
                 The number of images to generate per prompt.
             eta (`float`, *optional*, defaults to 0.0):
-                Corresponds to parameter eta (η) from the [DDIM](https://arxiv.org/abs/2010.02502) paper. Only applies
+                Corresponds to parameter eta (η) from the DDIM scheduler. Only applies
                 to the [`~schedulers.DDIMScheduler`], and is ignored in other schedulers.
             generator (`torch.Generator` or `List[torch.Generator]`, *optional*):
                 A [`torch.Generator`](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make
@@ -975,10 +954,9 @@ class HunyuanVideoPipeline(DiffusionPipeline):
                 plain tuple.
             cross_attention_kwargs (`dict`, *optional*):
                 A kwargs dictionary that if specified is passed along to the [`AttentionProcessor`] as defined in
-                [`self.processor`](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py).
+                the diffusers attention_processor module.
             guidance_rescale (`float`, *optional*, defaults to 0.0):
-                Guidance rescale factor from [Common Diffusion Noise Schedules and Sample Steps are
-                Flawed](https://arxiv.org/pdf/2305.08891.pdf). Guidance rescale factor should fix overexposure when
+                Guidance rescale factor. Should fix overexposure when
                 using zero terminal SNR.
             clip_skip (`int`, *optional*):
                 Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
@@ -1267,7 +1245,7 @@ class HunyuanVideoPipeline(DiffusionPipeline):
                     )
 
                 if self.do_classifier_free_guidance and self.guidance_rescale > 0.0:
-                    # Based on 3.4. in https://arxiv.org/pdf/2305.08891.pdf
+                    # Guidance rescale
                     noise_pred = rescale_noise_cfg(
                         noise_pred,
                         noise_pred_text,
@@ -1451,7 +1429,7 @@ class HunyuanVideoPipeline(DiffusionPipeline):
             num_videos_per_prompt (`int`, *optional*, defaults to 1):
                 The number of images to generate per prompt.
             eta (`float`, *optional*, defaults to 0.0):
-                Corresponds to parameter eta (η) from the [DDIM](https://arxiv.org/abs/2010.02502) paper. Only applies
+                Corresponds to parameter eta (η) from the DDIM scheduler. Only applies
                 to the [`~schedulers.DDIMScheduler`], and is ignored in other schedulers.
             generator (`torch.Generator` or `List[torch.Generator]`, *optional*):
                 A [`torch.Generator`](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make
@@ -1474,10 +1452,9 @@ class HunyuanVideoPipeline(DiffusionPipeline):
                 plain tuple.
             cross_attention_kwargs (`dict`, *optional*):
                 A kwargs dictionary that if specified is passed along to the [`AttentionProcessor`] as defined in
-                [`self.processor`](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py).
+                the diffusers attention_processor module.
             guidance_rescale (`float`, *optional*, defaults to 0.0):
-                Guidance rescale factor from [Common Diffusion Noise Schedules and Sample Steps are
-                Flawed](https://arxiv.org/pdf/2305.08891.pdf). Guidance rescale factor should fix overexposure when
+                Guidance rescale factor. Should fix overexposure when
                 using zero terminal SNR.
             clip_skip (`int`, *optional*):
                 Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
@@ -1900,7 +1877,7 @@ class HunyuanVideoPipeline(DiffusionPipeline):
                         )
                     
                     if self.do_classifier_free_guidance and self.guidance_rescale > 0.0:
-                        # Based on 3.4. in https://arxiv.org/pdf/2305.08891.pdf
+                        # Guidance rescale
                         noise_pred = rescale_noise_cfg(
                             noise_pred,
                             noise_pred_text,

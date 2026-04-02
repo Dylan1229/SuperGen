@@ -13,10 +13,6 @@ class PatchEmbed(nn.Module):
 
     A convolution based approach to patchifying a 2D image w/ embedding projection.
 
-    Based on the impl in https://github.com/google-research/vision_transformer
-
-    Hacked together by / Copyright 2020 Ross Wightman
-
     Remove the _assert function in forward function to be compatible with multi-resolution images.
     """
 
@@ -62,8 +58,6 @@ class PatchEmbed(nn.Module):
 class TextProjection(nn.Module):
     """
     Projects text embeddings. Also handles dropout for classifier-free guidance.
-
-    Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/nets/PixArt_blocks.py
     """
 
     def __init__(self, in_channels, hidden_size, act_layer, dtype=None, device=None):
@@ -102,7 +96,6 @@ def timestep_embedding(t, dim, max_period=10000):
     Returns:
         embedding (torch.Tensor): An (N, D) Tensor of positional embeddings.
 
-    .. ref_link: https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
     """
     half = dim // 2
     freqs = torch.exp(

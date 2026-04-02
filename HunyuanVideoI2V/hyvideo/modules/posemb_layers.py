@@ -59,7 +59,6 @@ def get_meshgrid_nd(start, *args, dim=2):
 #################################################################################
 #                   Rotary Positional Embedding Functions                       #
 #################################################################################
-# https://github.com/meta-llama/llama/blob/be327c427cc5e89cc1d3ab3d3fec4484df771245/llama/model.py#L80
 
 
 def reshape_for_broadcast(

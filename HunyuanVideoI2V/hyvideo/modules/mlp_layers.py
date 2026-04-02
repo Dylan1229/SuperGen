@@ -1,6 +1,3 @@
-# Modified from timm library:
-# https://github.com/huggingface/pytorch-image-models/blob/648aaa41233ba83eb38faf5ba9d415d574823241/timm/layers/mlp.py#L13
-
 from functools import partial
 
 import torch
@@ -61,7 +58,7 @@ class MLP(nn.Module):
 
 # 
 class MLPEmbedder(nn.Module):
-    """copied from https://github.com/black-forest-labs/flux/blob/main/src/flux/modules/layers.py"""
+    """MLP embedder with SiLU activation."""
     def __init__(self, in_dim: int, hidden_dim: int, device=None, dtype=None):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()

@@ -115,7 +115,7 @@ def generate_video(
         caching_transformer.load_state_dict(pipe.transformer.state_dict())
         caching_transformer.to(dtype)
         pipe.transformer = caching_transformer
-        # NOTE(MX)
+
         dist_manager = DistributedManager("allgather", enable_intra_tile_cache)
         pipe.dist_manager = dist_manager
         pipe.transformer.dist_manager = dist_manager
@@ -246,7 +246,7 @@ if __name__ == "__main__":
     if args.shift_timesteps:
         shift_timesteps = [int(step) for step in args.shift_timesteps.split(",")]
     
-    # NOTE(MX)
+
     long_timeout = datetime.timedelta(minutes=30)
     if "RANK" in os.environ:
         dist.init_process_group("nccl", timeout=long_timeout)

@@ -27,22 +27,11 @@ logger = logging.get_logger(__name__)
 EXAMPLE_DOC_STRING = """
     Examples:
         ```py
-        >>> import torch
-        >>> from diffusers import CogVideoXImageToVideoPipeline
-        >>> from diffusers.utils import export_to_video, load_image
-
-        >>> pipe = CogVideoXImageToVideoPipeline.from_pretrained("THUDM/CogVideoX-5b-I2V", torch_dtype=torch.bfloat16)
-        >>> pipe.to("cuda")
-
-        >>> prompt = "An astronaut hatching from an egg, on the surface of the moon, the darkness and depth of space realised in the background. High quality, ultrarealistic detail and breath-taking movie-like camera shot."
-        >>> image = load_image(
-        ...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"
-        ... )
-        >>> video = pipe(image, prompt, use_dynamic_cfg=True)
-        >>> export_to_video(video.frames[0], "output.mp4", fps=8)
+        >>> # See README.md for usage examples
         ```
-"""   
-# Similar to diffusers.pipelines.hunyuandit.pipeline_hunyuandit.get_resize_crop_region_for_grid
+"""
+
+
 def get_resize_crop_region_for_grid(src, tgt_width, tgt_height):
     tw = tgt_width
     th = tgt_height
@@ -184,8 +173,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         if not self.vae.config.invert_scale_latents:
             image_latents = self.vae_scaling_factor_image * image_latents
         else:
-            # This is awkward but required because the CogVideoX team forgot to multiply the
-            # scaling factor during training :)
+            # Invert scale factor (required by the model's training configuration)
             image_latents = 1 / self.vae_scaling_factor_image * image_latents
 
         padding_shape = (
@@ -340,9 +328,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                 in their `set_timesteps` method. If not defined, the default behavior when `num_inference_steps` is
                 passed will be used. Must be in descending order.
             guidance_scale (`float`, *optional*, defaults to 7.0):
-                Guidance scale as defined in [Classifier-Free Diffusion Guidance](https://arxiv.org/abs/2207.12598).
-                `guidance_scale` is defined as `w` of equation 2. of [Imagen
-                Paper](https://arxiv.org/pdf/2205.11487.pdf). Guidance scale is enabled by setting `guidance_scale >
+                Guidance scale for classifier-free diffusion guidance. Guidance scale is enabled by setting `guidance_scale >
                 1`. Higher guidance scale encourages to generate images that are closely linked to the text `prompt`,
                 usually at the expense of lower image quality.
             num_videos_per_prompt (`int`, *optional*, defaults to 1):
@@ -370,7 +356,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
             attention_kwargs (`dict`, *optional*):
                 A kwargs dictionary that if specified is passed along to the `AttentionProcessor` as defined under
                 `self.processor` in
-                [diffusers.models.attention_processor](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py).
+                diffusers attention_processor module.
             callback_on_step_end (`Callable`, *optional*):
                 A function that calls at the end of each denoising steps during the inference. The function is called
                 with the following arguments: `callback_on_step_end(self: DiffusionPipeline, step: int, timestep: int,
@@ -459,9 +445,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
 
         device = self._execution_device
 
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
+        # guidance_scale = 1 corresponds to doing no classifier free guidance.
 
         do_classifier_free_guidance = guidance_scale > 1.0
 
@@ -586,7 +570,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
             else None
             )
 
-        # NOTE(MX)
+        #
         self.dist_manager.setup_config(
             latents, 
             image_latents, 
@@ -627,7 +611,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                         latent_image_input = torch.cat([image_latents_for_view] * 2) if do_classifier_free_guidance else image_latents_for_view
                         # Concatenate all latents over channels dimention
                         latent_model_input = torch.cat([latent_model_input, latent_image_input], dim=2)
-                        # TODO(MX): this latent might be reused for DiT
+                        # TODO: this latent might be reused for DiT
 
                         # Get effective cache threshold for this tile
                         effective_cache_thresh = cache_thresh
@@ -718,7 +702,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                         tile_weight=tile_weight,
                     )
                         
-                # NOTE(MX)
+                #
                 fused_noise_pred = self.dist_manager.allgather_fused_noise()
                 latent = self.dist_manager.get_latents()
                 
@@ -840,9 +824,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                 in their `set_timesteps` method. If not defined, the default behavior when `num_inference_steps` is
                 passed will be used. Must be in descending order.
             guidance_scale (`float`, *optional*, defaults to 7.0):
-                Guidance scale as defined in [Classifier-Free Diffusion Guidance](https://arxiv.org/abs/2207.12598).
-                `guidance_scale` is defined as `w` of equation 2. of [Imagen
-                Paper](https://arxiv.org/pdf/2205.11487.pdf). Guidance scale is enabled by setting `guidance_scale >
+                Guidance scale for classifier-free diffusion guidance. Guidance scale is enabled by setting `guidance_scale >
                 1`. Higher guidance scale encourages to generate images that are closely linked to the text `prompt`,
                 usually at the expense of lower image quality.
             num_videos_per_prompt (`int`, *optional*, defaults to 1):
@@ -870,7 +852,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
             attention_kwargs (`dict`, *optional*):
                 A kwargs dictionary that if specified is passed along to the `AttentionProcessor` as defined under
                 `self.processor` in
-                [diffusers.models.attention_processor](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py).
+                diffusers attention_processor module.
             callback_on_step_end (`Callable`, *optional*):
                 A function that calls at the end of each denoising steps during the inference. The function is called
                 with the following arguments: `callback_on_step_end(self: DiffusionPipeline, step: int, timestep: int,
@@ -932,9 +914,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
 
         device = self._execution_device
 
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
+        # guidance_scale = 1 corresponds to doing no classifier free guidance.
         do_classifier_free_guidance = guidance_scale > 1.0
 
         # 3. Encode input prompt
@@ -1159,7 +1139,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                 export_to_video(stage1_result[0], os.path.join(output_dir, "stage1_lowres_video.mp4"), fps=8)
                 logger.info(f"[rank={self.dist_manager.rank}]: Saved Stage 1 video to {output_dir}/stage1_lowres_video.mp4")
         else:
-            # NOTE(MX)
+            #
             if self.dist_manager.is_first_rank:
                 logger.info(f"[rank={self.dist_manager.rank}]: No low-resolution latents path provided or not found. Running Stage 1 generation.")
                 # Stage 1: Low Resolution Generation 
@@ -1239,7 +1219,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                     shape = shape[:1] + (shape[1] + shape[1] % self.transformer.config.patch_size_t,) + shape[2:]
                 low_res_latents = randn_tensor(shape, generator=generator, device=self._execution_device, dtype=self.text_encoder.dtype)
 
-        # NOTE(MX)
+        #
         rank = self.dist_manager.rank
         dist.broadcast(low_res_latents, src=self.dist_manager.first_rank)
         

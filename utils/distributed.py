@@ -240,7 +240,7 @@ class DistributedManager:
 
 
     def shift(self):
-        # TODO(MX): can be changed to interleaved shifting
+        # TODO: can be changed to interleaved shifting
         self.current_shift_step_h = (self.current_shift_step_h + 1) % self.loop_step
         self.current_shift_step_w = (self.current_shift_step_w + 1) % self.loop_step
     
@@ -255,7 +255,7 @@ class DistributedManager:
         self.idx_latent = self.register_buffer(name=name, shape=latent_shape)
         # Cache related
         if self.enable_cache:
-            # TODO(MX): This is fixed to CFG method, make it more flexible if necessary
+            # TODO: This is fixed to CFG method, make it more flexible if necessary
             # Cache related:
             cfg_factor = 2 if self.do_classifier_free_guidance else 1
             shape = (self.avg_workload, self.latent_window_shape[0] * cfg_factor, *self.latent_window_shape[1:])
@@ -310,7 +310,7 @@ class DistributedManager:
         """Copy latest ring latent to buffer, preparing for allgather."""
         # Since tensors used by caching are always updated in-place, 
         # we only need to update tiles here.
-        # TODO(MX): We may use tile buffer in-place too.
+        # TODO: We may use tile buffer in-place too.
         for name, ring2d in self.ring2d_dict.items():
             tensor_idx = self.buffer_index_dict[name]
             if start_idx > tensor_idx or end_idx < tensor_idx:
@@ -516,7 +516,7 @@ class DistributedManager:
 
     def _redistribute_buffer_content(self, old_global_indices, new_global_indices):
         """Copy data of new indices into LOCAL buffer."""
-        # TODO(MX): Prefer to hold local tiles if possible.
+        # TODO: Prefer to hold local tiles if possible.
         # The current version will redistribute all tiles regardless of local ones.
         old_mapping = {}
         for rank, idx_list in enumerate(old_global_indices):
@@ -567,7 +567,7 @@ class DistributedManager:
             print(f"WARNING, rank {self.rank} is idle after work redistribution.")
         global_indices = [a + s for a,s in zip(active_indices, skipped_indices)]
 
-        # TODO(MX): We only changed the tile index, but the buffer content doesn't
+        # TODO: We only changed the tile index, but the buffer content doesn't
         # get redistributed yet! We should move them too!
 
         old_global_indices = self.global_indices

@@ -1,8 +1,8 @@
-output/ 
-# scripts/
+output/
 __pycache__
 */ckpts/
 *egg-info
+.claude/
 
 test
 /*.log

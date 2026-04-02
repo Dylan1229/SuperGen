@@ -148,7 +148,7 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
                 should_calc = True
                 self.accumulated_error.set_window_latent(torch.zeros_like(raw_input), *window_position)
 
-        # TODO(MX): also return the predicted output, so that we don't need to call `forward` again
+        # TODO: also return the predicted output, so that we don't need to call `forward` again
         # If cache hit, return the cached result.
         if should_calc:
             logger.info(f"rank={self.dist_manager.rank} Cache miss, step {step_index} should recalculate tile {tile_index}")

@@ -420,7 +420,6 @@ def get_rope_freq_from_size(
     return freqs_cos, freqs_sin
 
 
-# copy from https://github.com/huggingface/diffusers/blob/ec9bfa9e148b7764137dd92247ce859d915abcb0/examples/consistency_distillation/train_lcm_distill_lora_sd_wds.py#L258
 # get kohya lora state dict
 def get_module_kohya_state_dict(module, prefix, dtype, adapter_name="default"):
     kohya_ss_state_dict = {}

@@ -45,8 +45,7 @@ except:
 
 
 ###############################################
-# 20250308 pftq: Riflex workaround to fix 192-frame-limit bug, credit to Kijai for finding it in ComfyUI and thu-ml for making it
-# https://github.com/thu-ml/RIFLEx/blob/main/riflex_utils.py
+# RIFLEx workaround to fix 192-frame-limit bug
 from diffusers.models.embeddings import get_1d_rotary_pos_embed
 import numpy as np
 from typing import Union,Optional
@@ -208,7 +207,6 @@ class Inference(object):
         self.logger = logger
         self.parallel_args = parallel_args
 
-    # 20250316 pftq: Fixed multi-GPU loading times going up to 20 min due to loading contention by loading models only to one GPU and braodcasting to the rest.
     @classmethod
     def from_pretrained(cls, pretrained_model_path, args, device=None, **kwargs):
         """
@@ -221,19 +219,16 @@ class Inference(object):
         """
         logger.info(f"Got text-to-video model root path: {pretrained_model_path}")
         
-        # TODO(MX): Reuse this building method
         # ========================================================================
         # Initialize Distributed Environment
         # ========================================================================
-        # 20250316 pftq: Modified to extract rank and world_size early for sequential loading
         if args.ulysses_degree > 1 or args.ring_degree > 1:
             assert xfuser is not None, "Ulysses Attention and Ring Attention requires xfuser package."
             assert args.use_cpu_offload is False, "Cannot enable use_cpu_offload in the distributed environment."
-            # 20250316 pftq: Set local rank and device explicitly for NCCL
             local_rank = int(os.environ['LOCAL_RANK'])
             device = torch.device(f"cuda:{local_rank}")
-            torch.cuda.set_device(local_rank)  # 20250316 pftq: Set CUDA device explicitly
-            dist.init_process_group("nccl")  # 20250316 pftq: Removed device_id, rely on set_device
+            torch.cuda.set_device(local_rank)
+            dist.init_process_group("nccl")
             rank = dist.get_rank()
             world_size = dist.get_world_size()
             assert world_size == args.ring_degree * args.ulysses_degree, \
@@ -245,8 +240,8 @@ class Inference(object):
                 ulysses_degree=args.ulysses_degree,
             )
         else:
-            rank = 0  # 20250316 pftq: Default rank for single GPU
-            world_size = 1  # 20250316 pftq: Default world_size for single GPU
+            rank = 0
+            world_size = 1
             if device is None:
                 device = "cuda" if torch.cuda.is_available() else "cpu"
     
@@ -256,7 +251,7 @@ class Inference(object):
         # ========================================================================
         # Build main model, VAE, and text encoder sequentially on rank 0
         # ========================================================================
-        # 20250316 pftq: Load models only on rank 0, then broadcast
+        # Load models only on rank 0, then broadcast
         if rank == 0:
             logger.info("Building model...")
             factor_kwargs = {"device": device, "dtype": PRECISION_TO_TYPE[args.precision]}
@@ -341,14 +336,14 @@ class Inference(object):
                     device=device if not args.use_cpu_offload else "cpu",
                 )
         else:
-            # 20250316 pftq: Initialize as None on non-zero ranks
+            # Initialize as None on non-zero ranks
             model = None
             vae = None
             vae_kwargs = None
             text_encoder = None
             text_encoder_2 = None
     
-        # 20250316 pftq: Broadcast models to all ranks
+        # Broadcast models to all ranks
         if world_size > 1:
             logger.info(f"Rank {rank}: Starting broadcast synchronization")
             dist.barrier()  # Ensure rank 0 finishes loading before broadcasting
@@ -420,7 +415,7 @@ class Inference(object):
             logger.info(f"Rank {rank}: Broadcasting VAE parameters")
             for param in vae.parameters():
                 dist.broadcast(param.data, src=0)
-            # 20250316 pftq: Use broadcast_object_list for vae_kwargs
+            # Use broadcast_object_list for vae_kwargs
             logger.info(f"Rank {rank}: Broadcasting vae_kwargs")
             vae_kwargs_list = [vae_kwargs] if rank == 0 else [None]
             dist.broadcast_object_list(vae_kwargs_list, src=0)
@@ -614,7 +609,7 @@ class HunyuanVideoSampler(Inference):
 
         return pipeline
 
-    # 20250317 pftq: Modified to use Riflex when >192 frames
+    # Use RIFLEx when >192 frames
     def get_rotary_pos_embed(self, video_length, height, width):
         target_ndim = 3
         ndim = 5 - 2  # B, C, F, H, W -> F, H, W
@@ -647,9 +642,9 @@ class HunyuanVideoSampler(Inference):
         if len(rope_sizes) != target_ndim:
             rope_sizes = [1] * (target_ndim - len(rope_sizes)) + rope_sizes  # Pad time axis
     
-        # 20250316 pftq: Add RIFLEx logic for > 192 frames
+        # RIFLEx logic for > 192 frames
         L_test = rope_sizes[0]  # Latent frames
-        L_train = 25  # Training length from HunyuanVideo
+        L_train = 25  # Training sequence length
         actual_num_frames = video_length  # Use input video_length directly
     
         head_dim = self.model.hidden_size // self.model.heads_num
@@ -695,7 +690,7 @@ class HunyuanVideoSampler(Inference):
             freqs_sin = torch.cat([f[1] for f in freqs], dim=1)
             logger.debug(f"freqs_cos shape: {freqs_cos.shape}, device: {freqs_cos.device}")
         else:
-            # 20250316 pftq: Original code for <= 192 frames
+            # Original code for <= 192 frames
             logger.debug(f"actual_num_frames = {actual_num_frames} <= 192, using original RoPE")
             freqs_cos, freqs_sin = get_nd_rotary_pos_embed(
                 rope_dim_list,

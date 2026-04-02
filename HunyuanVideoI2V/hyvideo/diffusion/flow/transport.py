@@ -77,7 +77,6 @@ class Transport:
         self.sample_eps = sample_eps
 
         self.snr_type = snr_type
-        # timestep shift: http://arxiv.org/abs/2403.03206
         self.shift = shift  # flow matching shift factor, =sqrt(m/n)
         if video_shift is None: video_shift = shift # if video shift is not given, set it to be the same as flow shift
         self.video_shift = video_shift

@@ -27,9 +27,8 @@ from utils.tile_utils import TiledLatentTensor2D
 
 class MMDoubleStreamBlock(nn.Module):
     """
-    A multimodal dit block with seperate modulation for
-    text and image/video, see more details (SD3): https://arxiv.org/abs/2403.03206
-                                     (Flux.1): https://github.com/black-forest-labs/flux
+    A multimodal dit block with separate modulation for
+    text and image/video.
     """
 
     def __init__(
@@ -302,10 +301,7 @@ class MMDoubleStreamBlock(nn.Module):
 
 class MMSingleStreamBlock(nn.Module):
     """
-    A DiT block with parallel linear layers as described in
-    https://arxiv.org/abs/2302.05442 and adapted modulation interface.
-    Also refer to (SD3): https://arxiv.org/abs/2403.03206
-                  (Flux.1): https://github.com/black-forest-labs/flux
+    A DiT block with parallel linear layers and adapted modulation interface.
     """
 
     def __init__(
@@ -471,10 +467,6 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
 
     Inherited from ModelMixin and ConfigMixin for compatibility with diffusers' sampler StableDiffusionPipeline.
 
-    Reference:
-    [1] Flux.1: https://github.com/black-forest-labs/flux
-    [2] MMDiT: http://arxiv.org/abs/2403.03206
-
     Parameters
     ----------
     args: argparse.Namespace
@@ -560,7 +552,6 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
         self.i2v_condition_type = args.i2v_condition_type
 
         # Text projection. Default to linear projection.
-        # Alternative: TokenRefiner. See more details (LI-DiT): http://arxiv.org/abs/2406.11831
         self.use_attention_mask = use_attention_mask
         self.text_projection = text_projection
 
@@ -736,7 +727,7 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
         
         raw_input = x
 
-        # TODO(MX): make this function side-effect-free.
+        # TODO: make this function side-effect-free.
         cnt = step_index
         current_thresh = effective_cache_thresh if effective_cache_thresh is not None else self.thresh
         should_calc = True
@@ -775,7 +766,7 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
                 should_calc = True
                 self.accumulated_error.set_window_latent(torch.zeros_like(raw_input), *window_position)
 
-        # TODO(MX): also return the predicted output, so that we don't need to call `forward` again
+        # TODO: also return the predicted output, so that we don't need to call `forward` again
         # If cache hit, return the cached result.
         if should_calc:
             logger.info(f"rank={self.dist_manager.rank} Cache miss, step {step_index} should recalculate tile {tile_index}")
