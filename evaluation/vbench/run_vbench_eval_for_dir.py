@@ -64,9 +64,11 @@ METRICS = [
 
 
 def build_prefix_from_exp_dir(exp_dir: str) -> str:
-    # Expect exp_dir contains path segment 'exp_result'; use the components after it
+    # Build a filesystem-safe prefix from trailing path components. The root
+    # anchor ("/") is excluded so the prefix is never itself an absolute path --
+    # otherwise `dir / f"{prefix}_result.json"` would resolve to "/..._result.json".
     p = Path(exp_dir).resolve()
-    parts = list(p.parts)
+    parts = [x for x in p.parts if x != p.anchor]
     if "exp_result" in parts:
         idx = parts.index("exp_result")
         suffix_parts = parts[idx + 1 :]
@@ -74,7 +76,7 @@ def build_prefix_from_exp_dir(exp_dir: str) -> str:
         # Fallback: use last 3 components
         suffix_parts = parts[-3:]
     prefix = "_".join(x.replace(" ", "_") for x in suffix_parts)
-    return prefix
+    return prefix or "vbench"
 
 
 def list_mp4_files(root_dir: str) -> List[Path]:
