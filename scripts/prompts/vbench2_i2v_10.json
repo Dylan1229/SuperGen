@@ -1,0 +1,132 @@
+[
+    {
+        "prompt_en": "A teddy bear is climbing over a wooden fence",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "other",
+        "image_name": "A teddy bear is climbing over a wooden fence.jpg"
+    },
+    {
+        "prompt_en": "two people in a canoe on a lake with mountains in the background",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "two people in a canoe on a lake with mountains in the background.jpg"
+    },
+    {
+        "prompt_en": "a room with a desk and a chair in it",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "a room with a desk and a chair in it.jpg"
+    },
+    {
+        "prompt_en": "a man in a mexican outfit holding an acoustic guitar",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a man in a mexican outfit holding an acoustic guitar.jpg"
+    },
+    {
+        "prompt_en": "a small bird sits on a moss covered branch",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a small bird sits on a moss covered branch.jpg"
+    },
+    {
+        "prompt_en": "cars parked on the side of the road during a snowstorm",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "cars parked on the side of the road during a snowstorm.jpg"
+    },
+    {
+        "prompt_en": "an aerial view of a body of water and a beach",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "an aerial view of a body of water and a beach.jpg"
+    },
+    {
+        "prompt_en": "a person is cooking food in a wok on a stove",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "food",
+        "image_name": "a person is cooking food in a wok on a stove.jpg"
+    },
+    {
+        "prompt_en": "two men in white clothing standing next to each other",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "multiple-human",
+        "image_name": "two men in white clothing standing next to each other.jpg"
+    },
+    {
+        "prompt_en": "a table and chairs in a room with sunlight coming through the window",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "a table and chairs in a room with sunlight coming through the window.jpg"
+    }
+]

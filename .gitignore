@@ -7,3 +7,17 @@ __pycache__
 test
 /*.log
 /*.err
+
+# --- reproduce-branch artifacts (large / regenerable; kept on disk, out of git) ---
+evaluation/exp_result/
+evaluation/**/VisualRetention/
+plots/noise_prediction_profile/
+# generated videos / latents
+*.mp4
+*.pt
+# bulk VBench input crops (355/res; re-derivable from VBench/evaluation_use). Tracked sample images stay tracked.
+input_image/2k_1440x2560/
+input_image/4k_2160x3840/
+# large bundled FVD I3D weights (restored from the eval repo onto disk; see evaluation/README.md)
+evaluation/common_metrics_on_video_quality/fvd/*/*.pt
+evaluation/common_metrics_on_video_quality/fvd/tensorflow/i3d-kinetics-tensorflow1-400-v1/

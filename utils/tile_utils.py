@@ -1,3 +1,4 @@
+import os
 import torch
 from typing import Tuple, Dict, Any, TYPE_CHECKING
 import logging
@@ -334,21 +335,39 @@ class SlidingWindowConfig:
     
     DEFAULT_WINDOW_SIZE = (64, 64)
     
-    def __init__(self, height: int, width: int, loop_step: int = 8):
+    def __init__(self, height: int, width: int, loop_step: int = 8,
+                 tile_lat_height: int = None, tile_lat_width: int = None):
         """
         Initialize sliding window configuration.
-        
+
         Args:
             height: Input height in latent space
             width: Input width in latent space
             loop_step: Loop step parameter for calculating step sizes
+            tile_lat_height: Optional explicit tile height (latent space)
+            tile_lat_width: Optional explicit tile width (latent space)
+
+        The tile (window) size is chosen in priority order:
+          1. explicit tile_lat_height/width arguments,
+          2. the TILE_LAT_OVERRIDE env var ("HxW", e.g. "90x160") -- used by the
+             number-of-tiles ablation (scripts/CogvideoI2V/ablation_num_tiles.sh),
+          3. automatic selection from RESOLUTION_TO_WINDOW_SIZE.
         """
         self.height = height
         self.width = width
         self.loop_step = loop_step
-        
-        # Auto-select window size based on resolution
-        self.window_size = self._get_window_size(height, width)
+
+        # Select window size: explicit arg > env override (ablation) > auto by resolution
+        env_override = os.getenv("TILE_LAT_OVERRIDE")
+        if tile_lat_height and tile_lat_width:
+            self.window_size = (int(tile_lat_height), int(tile_lat_width))
+            logger.info(f"Using explicit window_size: {self.window_size}")
+        elif env_override:
+            h, w = env_override.lower().split("x")
+            self.window_size = (int(h), int(w))
+            logger.info(f"Using TILE_LAT_OVERRIDE window_size: {self.window_size}")
+        else:
+            self.window_size = self._get_window_size(height, width)
         
         # Calculate derived parameters
         self.num_windows_h = height // self.window_size[0]

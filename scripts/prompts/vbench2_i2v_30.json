@@ -1,0 +1,392 @@
+[
+    {
+        "prompt_en": "a person is putting sauce on a burger",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "food",
+        "image_name": "a person is putting sauce on a burger.jpg"
+    },
+    {
+        "prompt_en": "a man and a child riding bumper cars in an amusement park",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "multiple-human",
+        "image_name": "a man and a child riding bumper cars in an amusement park.jpg"
+    },
+    {
+        "prompt_en": "a mountain range with a sky background",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "a mountain range with a sky background.jpg"
+    },
+    {
+        "prompt_en": "a room with a desk and a chair in it",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "a room with a desk and a chair in it.jpg"
+    },
+    {
+        "prompt_en": "a close up of leaves with water droplets on them",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "plant",
+        "image_name": "a close up of leaves with water droplets on them.jpg"
+    },
+    {
+        "prompt_en": "a wooden table in front of a brick wall with bottles on the wall",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "a wooden table in front of a brick wall with bottles on the wall.jpg"
+    },
+    {
+        "prompt_en": "a snow covered street",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "a snow covered street.jpg"
+    },
+    {
+        "prompt_en": "a sandy beach with palm trees on the shore",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "a sandy beach with palm trees on the shore.jpg"
+    },
+    {
+        "prompt_en": "an aerial view of big ben and the houses of parliament in london",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "an aerial view of big ben and the houses of parliament in london.jpg"
+    },
+    {
+        "prompt_en": "a man standing on a boat with a net",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a man standing on a boat with a net.jpg"
+    },
+    {
+        "prompt_en": "a chair in a room next to some drawings",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "a chair in a room next to some drawings.jpg"
+    },
+    {
+        "prompt_en": "an outdoor dining area surrounded by plants and a brick walkway",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "an outdoor dining area surrounded by plants and a brick walkway.jpg"
+    },
+    {
+        "prompt_en": "tower bridge in london",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "tower bridge in london.jpg"
+    },
+    {
+        "prompt_en": "a sandy beach with a wooden pier in the water",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "a sandy beach with a wooden pier in the water.jpg"
+    },
+    {
+        "prompt_en": "a steam train traveling through the woods",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "transportation",
+        "image_name": "a steam train traveling through the woods.jpg"
+    },
+    {
+        "prompt_en": "two men riding bikes down a road near a forest",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "multiple-human",
+        "image_name": "two men riding bikes down a road near a forest.jpg"
+    },
+    {
+        "prompt_en": "a group of hot air balloons flying over a valley",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "a group of hot air balloons flying over a valley.jpg"
+    },
+    {
+        "prompt_en": "a tiger walking through a wooded area",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a tiger walking through a wooded area.jpg"
+    },
+    {
+        "prompt_en": "a farm in the middle of the day",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "a farm in the middle of the day.jpg"
+    },
+    {
+        "prompt_en": "a visually captivating abstract video, rich in color, set against a dramatic black background",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "abstract",
+        "image_name": "a visually captivating abstract video, rich in color, set against a dramatic black background.jpg"
+    },
+    {
+        "prompt_en": "tangerines in a metal bowl on a table",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "food",
+        "image_name": "tangerines in a metal bowl on a table.jpg"
+    },
+    {
+        "prompt_en": "a young boy leaning on a wooden pole",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a young boy leaning on a wooden pole.jpg"
+    },
+    {
+        "prompt_en": "a close-up view of a sea fan in the water",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "abstract",
+        "image_name": "a close-up view of a sea fan in the water.jpg"
+    },
+    {
+        "prompt_en": "a group of pots on a stove with flames in the background",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "food",
+        "image_name": "a group of pots on a stove with flames in the background.jpg"
+    },
+    {
+        "prompt_en": "a woman smiles while holding a yellow flower",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a woman smiles while holding a yellow flower.jpg"
+    },
+    {
+        "prompt_en": "a snowman wearing a santa hat and scarf",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "other",
+        "image_name": "a snowman wearing a santa hat and scarf.jpg"
+    },
+    {
+        "prompt_en": "a field of orange flowers near the ocean'",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "plant",
+        "image_name": "a field of orange flowers near the ocean'.jpg"
+    },
+    {
+        "prompt_en": "a butterfly sits on top of a purple flower",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a butterfly sits on top of a purple flower.jpg"
+    },
+    {
+        "prompt_en": "a close-up view of the flames of a fireplace",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "a close-up view of the flames of a fireplace.jpg"
+    },
+    {
+        "prompt_en": "a seal swimming in the water",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a seal swimming in the water.jpg"
+    }
+]

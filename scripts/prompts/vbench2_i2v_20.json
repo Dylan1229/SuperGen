@@ -1,0 +1,262 @@
+[
+    {
+        "prompt_en": "a bunch of houses that are on a hillside",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "a bunch of houses that are on a hillside.jpg"
+    },
+    {
+        "prompt_en": "the parthenon in acropolis, greece",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "the parthenon in acropolis, greece.jpg"
+    },
+    {
+        "prompt_en": "a white and blue airplane flying in the sky",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "transportation",
+        "image_name": "a white and blue airplane flying in the sky.jpg"
+    },
+    {
+        "prompt_en": "the great wall of china in autumn",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "the great wall of china in autumn.jpg"
+    },
+    {
+        "prompt_en": "a lion is roaring in the wild",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a lion is roaring in the wild.jpg"
+    },
+    {
+        "prompt_en": "a large wave crashes into a lighthouse",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "a large wave crashes into a lighthouse.jpg"
+    },
+    {
+        "prompt_en": "a purple and yellow abstract painting with a black background",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "abstract",
+        "image_name": "a purple and yellow abstract painting with a black background.jpg"
+    },
+    {
+        "prompt_en": "a room filled with paintings and statues",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "indoor",
+        "image_name": "a room filled with paintings and statues.jpg"
+    },
+    {
+        "prompt_en": "a man standing on top of a sand dune in the desert",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a man standing on top of a sand dune in the desert.jpg"
+    },
+    {
+        "prompt_en": "a man carrying a woman on his back in a field",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "multiple-human",
+        "image_name": "a man carrying a woman on his back in a field.jpg"
+    },
+    {
+        "prompt_en": "a man with a skull face paint smoking a cigar and holding a guitar",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a man with a skull face paint smoking a cigar and holding a guitar.jpg"
+    },
+    {
+        "prompt_en": "a woman in a hat is putting salt into a basket",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "single-human",
+        "image_name": "a woman in a hat is putting salt into a basket.jpg"
+    },
+    {
+        "prompt_en": "a blue and white smoke is swirly in the dark",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "abstract",
+        "image_name": "a blue and white smoke is swirly in the dark.jpg"
+    },
+    {
+        "prompt_en": "a highland cow with long horns standing in a field",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a highland cow with long horns standing in a field.jpg"
+    },
+    {
+        "prompt_en": "a foggy field that has trees in the grass",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "a foggy field that has trees in the grass.jpg"
+    },
+    {
+        "prompt_en": "a tiger walking through a wooded area",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "animal",
+        "image_name": "a tiger walking through a wooded area.jpg"
+    },
+    {
+        "prompt_en": "a castle on top of a hill covered in snow",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "architecture",
+        "image_name": "a castle on top of a hill covered in snow.jpg"
+    },
+    {
+        "prompt_en": "a very large waterfall in the middle of the day",
+        "dimension": [
+            "i2v_background",
+            "background_consistency",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "scenery",
+        "image_name": "a very large waterfall in the middle of the day.jpg"
+    },
+    {
+        "prompt_en": "two young girls playing with leaves in the woods",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "multiple-human",
+        "image_name": "two young girls playing with leaves in the woods.jpg"
+    },
+    {
+        "prompt_en": "A person is making dumplings",
+        "dimension": [
+            "i2v_subject",
+            "subject_consistency",
+            "motion_smoothness",
+            "dynamic_degree",
+            "aesthetic_quality",
+            "imaging_quality",
+            "temporal_flickering"
+        ],
+        "image_type": "food",
+        "image_name": "A person is making dumplings.jpg"
+    }
+]
