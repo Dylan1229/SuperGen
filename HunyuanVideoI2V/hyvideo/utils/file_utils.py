@@ -186,7 +186,7 @@ def save_videos_grid(videos: torch.Tensor, path: str, rescale=False, n_rows=1, f
         if rescale:
             x = (x + 1.0) / 2.0  # -1,1 -> 0,1
         x = torch.clamp(x, 0, 1)
-        x = (x * 255).numpy().astype(np.uint8)
+        x = (x * 255).detach().cpu().numpy().astype(np.uint8)
         outputs.append(x)
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
