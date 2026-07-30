@@ -763,6 +763,8 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         # but the tiles were cheap".
         if hasattr(self.transformer, "log_teacache_report"):
             self.transformer.log_teacache_report()
+        elif enable_intra_tile_cache and hasattr(self.transformer, "log_cache_report"):
+            self.transformer.log_cache_report()
 
         if not self.dist_manager.is_first_rank:
             return None

@@ -32,6 +32,11 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
         self.thresh = None
         self.ret_steps = None
         
+        # Cache-reuse accounting, so a run's skip rate is recorded next to its
+        # runtime (lets ours and a baseline be matched on skip rate, not just
+        # on each policy's own threshold).
+        self.cache_stats = {"checked": 0, "skipped": 0}
+
         # K history tracking
         self.k_history = {}
         self.enable_k_tracking = False
@@ -76,6 +81,7 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
         self.num_steps = num_steps
         self.thresh = thresh
         self.ret_steps = ret_steps
+        self.cache_stats = {"checked": 0, "skipped": 0}
 
         # Initialize per-tile cache attributes
         for tile_idx in range(num_tiles):
@@ -155,10 +161,13 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
 
         # TODO(MX): also return the predicted output, so that we don't need to call `forward` again
         # If cache hit, return the cached result.
+        self.cache_stats["checked"] += 1
+
         if should_calc:
             logger.info(f"rank={self.dist_manager.rank} Cache miss, step {step_index} should recalculate tile {tile_index}")
             return False, None
 
+        self.cache_stats["skipped"] += 1
         logger.info(f"rank={self.dist_manager.rank} Cache hit, step {step_index} is skipped for tile {tile_index}")
         self.prev_prev_raw_input.set_window_latent(prev_raw_input, *window_position)
         self.previous_raw_input.set_window_latent(raw_input, *window_position)
@@ -313,6 +322,16 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
             return (output,)
         
         return Transformer2DModelOutput(sample=output) 
+
+    def log_cache_report(self):
+        """Emit this run's cache-reuse rate. Parsed by run/common.sh:parse_skip_rate."""
+        checked = self.cache_stats.get("checked", 0)
+        skipped = self.cache_stats.get("skipped", 0)
+        rate = (skipped / checked) if checked else 0.0
+        logger.info(
+            f"CACHE_SKIP_RATE {rate:.4f} skipped={skipped} checked={checked}"
+        )
+        return {"skip_rate": rate, "skipped": skipped, "checked": checked}
 
     def save_k_history(self, filename: str = "k_history.json"):
         """Save k history to JSON file"""
