@@ -21,6 +21,7 @@ from modules import (
     CustomCogVideoXDDIMScheduler,
     CachingCogVideoXTransformer3DModel,
     TeaCacheCogVideoXTransformer3DModel,
+    AdaCacheCogVideoXTransformer3DModel,
 )
 from pipeline_cogvideox_i2v_TVG import TiledCogVideoXImageToVideoPipeline
 from utils.distributed import DistributedManager
@@ -66,6 +67,8 @@ def generate_video(
     cache_method: str = "ours",
     teacache_rel_l1_thresh: float = 0.2,
     teacache_storage: str = "latent",
+    adacache_rate_scale: float = 1.0,
+    adacache_moreg: bool = False,
 ):
     """
     Generates a video based on the given prompt and saves it to the specified path.
@@ -130,8 +133,10 @@ def generate_video(
             transformer_cls = CachingCogVideoXTransformer3DModel
         elif cache_method == "teacache":
             transformer_cls = TeaCacheCogVideoXTransformer3DModel
+        elif cache_method == "adacache":
+            transformer_cls = AdaCacheCogVideoXTransformer3DModel
         else:
-            raise ValueError(f"unknown --cache_method {cache_method!r}; use 'ours' or 'teacache'")
+            raise ValueError(f"unknown --cache_method {cache_method!r}; use 'ours', 'teacache', or 'adacache'")
         caching_transformer = transformer_cls(**pipe.transformer.config)
         caching_transformer.load_state_dict(pipe.transformer.state_dict())
         caching_transformer.to(dtype)
@@ -140,6 +145,11 @@ def generate_video(
             caching_transformer.setup_teacache(
                 rel_l1_thresh=teacache_rel_l1_thresh,
                 storage=teacache_storage,
+            )
+        elif cache_method == "adacache":
+            caching_transformer.setup_adacache(
+                rate_scale=adacache_rate_scale,
+                apply_moreg=adacache_moreg,
             )
         pipe.transformer = caching_transformer
         # NOTE(MX)
@@ -266,7 +276,8 @@ if __name__ == "__main__":
     parser.add_argument("--cache_thresh", type=float, default=0.05, help="Threshold for cache")
     parser.add_argument("--enable_region_aware_cache", action="store_true", help="Enable region-aware cache optimization")
     parser.add_argument("--static_tile_cache_scale_factor", type=float, default=0.5, help="Scale factor for cache threshold when tile is considered most static")
-    parser.add_argument("--cache_method", type=str, default="ours", choices=["ours", "teacache"],
+    parser.add_argument("--cache_method", type=str, default="ours",
+                        choices=["ours", "teacache", "adacache"],
                         help="Stage-2 cache policy: 'ours' (region-aware) or 'teacache' (P0-1 baseline). "
                              "Tiling/parallelism/scheduler are identical for both.")
     parser.add_argument("--teacache_rel_l1_thresh", type=float, default=0.2,
@@ -274,6 +285,11 @@ if __name__ == "__main__":
     parser.add_argument("--teacache_storage", type=str, default="latent", choices=["latent", "token"],
                         help="'latent': canvas-aligned residual (isolates the gate). "
                              "'token': upstream token-space residual, invalidated by window shifts.")
+    parser.add_argument("--adacache_rate_scale", type=float, default=1.0,
+                        help="Multiply every AdaCache codebook reuse-rate. Sweep knob standing in "
+                             "for upstream per-model codebook recalibration, which we do not perform.")
+    parser.add_argument("--adacache_moreg", action="store_true",
+                        help="Enable AdaCache motion regularization (hyperparameters are Open-Sora specific)")
     args = parser.parse_args()
     dtype = torch.float16 if args.dtype == "float16" else torch.bfloat16
 
@@ -321,6 +337,8 @@ if __name__ == "__main__":
         cache_method=args.cache_method,
         teacache_rel_l1_thresh=args.teacache_rel_l1_thresh,
         teacache_storage=args.teacache_storage,
+        adacache_rate_scale=args.adacache_rate_scale,
+        adacache_moreg=args.adacache_moreg,
     )
     end_time = time.time()
     logging.info(f"Total running time is {end_time - start_time:.2f} seconds")
