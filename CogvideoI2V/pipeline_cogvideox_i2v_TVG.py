@@ -644,6 +644,10 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                             effective_cache_thresh=effective_cache_thresh,
                             return_dict=False,
                             window_position=window_position,
+                            # TeaCache gates on the timestep embedding, so it needs
+                            # the same timestep/ofs the transformer will see.
+                            timestep=t.expand(latent_model_input.shape[0]),
+                            ofs=ofs_emb,
                         )
 
                         if can_be_cached:
@@ -753,6 +757,12 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                     progress_bar.update()
         end_time_stage2 = time.time()
         logger.info(f"[rank={self.dist_manager.rank}] Second Stage Running time: {end_time_stage2 - start_time_stage2} seconds")
+
+        # Cache-reuse accounting. For a baseline row the skip rate is as important
+        # as the runtime: it separates "the gate never fired" from "the gate fired
+        # but the tiles were cheap".
+        if hasattr(self.transformer, "log_teacache_report"):
+            self.transformer.log_teacache_report()
 
         if not self.dist_manager.is_first_rank:
             return None

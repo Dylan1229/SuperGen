@@ -17,7 +17,11 @@ from diffusers import (
 )
 from diffusers.utils import export_to_video, load_image, load_video
 
-from modules import CustomCogVideoXDDIMScheduler, CachingCogVideoXTransformer3DModel
+from modules import (
+    CustomCogVideoXDDIMScheduler,
+    CachingCogVideoXTransformer3DModel,
+    TeaCacheCogVideoXTransformer3DModel,
+)
 from pipeline_cogvideox_i2v_TVG import TiledCogVideoXImageToVideoPipeline
 from utils.distributed import DistributedManager
 
@@ -59,6 +63,9 @@ def generate_video(
     cache_thresh: float = 0.1,
     enable_region_aware_cache: bool = False,
     static_tile_cache_scale_factor: float = 1,
+    cache_method: str = "ours",
+    teacache_rel_l1_thresh: float = 0.2,
+    teacache_storage: str = "latent",
 ):
     """
     Generates a video based on the given prompt and saves it to the specified path.
@@ -87,6 +94,14 @@ def generate_video(
     - cache_thresh (float): Threshold for cache. 
     - enable_region_aware_cache (bool): Enable region-aware cache optimization that identifies static tiles.
     - static_tile_cache_scale_factor (float): Scale factor for cache threshold.
+    - cache_method (str): Which Stage-2 cache policy gates tile reuse: 'ours'
+      (region-aware) or 'teacache' (P0-1 baseline). Everything else -- tiling,
+      shifting, tile parallelism, scheduler -- is identical either way.
+    - teacache_rel_l1_thresh (float): TeaCache accumulated-relative-L1 threshold
+      (upstream: 0.1 / 0.2 / 0.3). Ignored unless cache_method='teacache'.
+    - teacache_storage (str): 'latent' (canvas-aligned residual, isolates the gate
+      from storage effects) or 'token' (upstream token-space residual, invalidated
+      by window shifts). Ignored unless cache_method='teacache'.
     """
     image = None
     video = None
@@ -111,9 +126,21 @@ def generate_video(
 
     if generate_type == "i2v":
         pipe = TiledCogVideoXImageToVideoPipeline.from_pretrained(model_path, torch_dtype=dtype)
-        caching_transformer = CachingCogVideoXTransformer3DModel(**pipe.transformer.config)
+        if cache_method == "ours":
+            transformer_cls = CachingCogVideoXTransformer3DModel
+        elif cache_method == "teacache":
+            transformer_cls = TeaCacheCogVideoXTransformer3DModel
+        else:
+            raise ValueError(f"unknown --cache_method {cache_method!r}; use 'ours' or 'teacache'")
+        caching_transformer = transformer_cls(**pipe.transformer.config)
         caching_transformer.load_state_dict(pipe.transformer.state_dict())
         caching_transformer.to(dtype)
+        if cache_method == "teacache":
+            # Same base weights, same pipeline; only the skip policy changes.
+            caching_transformer.setup_teacache(
+                rel_l1_thresh=teacache_rel_l1_thresh,
+                storage=teacache_storage,
+            )
         pipe.transformer = caching_transformer
         # NOTE(MX)
         dist_manager = DistributedManager("allgather", enable_intra_tile_cache)
@@ -143,7 +170,7 @@ def generate_video(
     logging.info(f"== Finish Loading, start to generate video ==")
     # Generate video
 
-    if not os.path.exists(low_res_latents_path):
+    if low_res_latents_path is not None and not os.path.exists(low_res_latents_path):
         low_res_latents_path = None
 
     if generate_type == "i2v":
@@ -239,6 +266,14 @@ if __name__ == "__main__":
     parser.add_argument("--cache_thresh", type=float, default=0.05, help="Threshold for cache")
     parser.add_argument("--enable_region_aware_cache", action="store_true", help="Enable region-aware cache optimization")
     parser.add_argument("--static_tile_cache_scale_factor", type=float, default=0.5, help="Scale factor for cache threshold when tile is considered most static")
+    parser.add_argument("--cache_method", type=str, default="ours", choices=["ours", "teacache"],
+                        help="Stage-2 cache policy: 'ours' (region-aware) or 'teacache' (P0-1 baseline). "
+                             "Tiling/parallelism/scheduler are identical for both.")
+    parser.add_argument("--teacache_rel_l1_thresh", type=float, default=0.2,
+                        help="TeaCache accumulated relative-L1 threshold (upstream: 0.1/0.2/0.3)")
+    parser.add_argument("--teacache_storage", type=str, default="latent", choices=["latent", "token"],
+                        help="'latent': canvas-aligned residual (isolates the gate). "
+                             "'token': upstream token-space residual, invalidated by window shifts.")
     args = parser.parse_args()
     dtype = torch.float16 if args.dtype == "float16" else torch.bfloat16
 
@@ -283,6 +318,9 @@ if __name__ == "__main__":
         cache_thresh=args.cache_thresh,
         enable_region_aware_cache=args.enable_region_aware_cache,
         static_tile_cache_scale_factor=args.static_tile_cache_scale_factor,
+        cache_method=args.cache_method,
+        teacache_rel_l1_thresh=args.teacache_rel_l1_thresh,
+        teacache_storage=args.teacache_storage,
     )
     end_time = time.time()
     logging.info(f"Total running time is {end_time - start_time:.2f} seconds")

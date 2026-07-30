@@ -100,7 +100,12 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
         is_non_shifting_step: bool,
         effective_cache_thresh: Optional[float] = None,
         return_dict: bool = False,
-        window_position: Tuple = None
+        window_position: Tuple = None,
+        # Accepted for interface parity with the TeaCache subclass, whose gate is
+        # driven by the timestep embedding rather than by latent content.
+        timestep: Union[int, float, torch.LongTensor] = None,
+        timestep_cond: Optional[torch.Tensor] = None,
+        ofs: Optional[Union[int, float, torch.LongTensor]] = None,
     ) -> Tuple[bool, Any]:
         if not self.enable_cache:
             raise RuntimeError
