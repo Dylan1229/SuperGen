@@ -19,6 +19,7 @@ from diffusers import CogVideoXImageToVideoPipeline
 from diffusers.utils import export_to_video
 from PIL import Image as PILImage
 
+from modules.global_rope import TiledRopeCache
 from utils import SlidingWindowConfig
 from utils.distributed import DistributedManager
 
@@ -308,6 +309,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         enable_cache_residual_profile: bool = False,
         enable_region_aware_cache: bool = False,
         static_tile_cache_scale_factor: float = 1.0,
+        rope_mode: str = "local",
     ) -> Union[CogVideoXPipelineOutput, Tuple]:
         
         """
@@ -577,13 +579,54 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
             for j in range(total_windows):
                 self.transformer.cache_residual_history[j] = []
 
-        # Local ROPE
+        # ---- positional encoding for each tile -------------------------------
+        # LOCAL rope (legacy): every tile gets the SAME table, because the call
+        # below carries no tile position. Diffusers' "slice" path always crops from
+        # the origin, so each tile is told it is the canvas's top-left corner. With
+        # the full global prompt also going to every tile, each tile renders the
+        # whole scene -> the duplicate-object artifact at 2K/4K.
+        #
+        # GLOBAL rope: slice the frequency table at the tile's absolute canvas
+        # offset, so tiles are positionally distinguishable. Verified in
+        # modules/test_global_rope.py to reproduce the legacy tensor exactly at
+        # offset (0,0), so this is a strict generalisation.
+        use_rope = self.transformer.config.use_rotary_positional_embeddings
+        self.tiled_rope_cache = None
+        p = self.transformer.config.patch_size
+        if use_rope and rope_mode != "local":
+            self.tiled_rope_cache = TiledRopeCache(
+                embed_dim=self.transformer.config.attention_head_dim,
+                canvas_size=(ll_height // p, ll_width // p),
+                trained_size=(self.transformer.config.sample_height // p,
+                              self.transformer.config.sample_width // p),
+                temporal_size=(latents.size(1) + self.transformer.config.patch_size_t - 1)
+                              // self.transformer.config.patch_size_t
+                              if self.transformer.config.patch_size_t
+                              else latents.size(1),
+                mode=rope_mode,
+                device=device,
+            )
+            logger.info(f"[rank={self.dist_manager.rank}]: canvas-absolute RoPE "
+                        f"(mode={rope_mode}) over {ll_height // p}x{ll_width // p} patches")
+
+        # Legacy per-tile table, still used when rope_mode == "local" and as the
+        # fallback shape reference.
         image_rotary_emb = [None for _ in range(total_windows)]
         for j in range(total_windows):
             image_rotary_emb[j] = (
             self._prepare_rotary_positional_embeddings(window_size[0] * self.vae_scale_factor_spatial, window_size[1] * self.vae_scale_factor_spatial, latents.size(1), device)
-            if self.transformer.config.use_rotary_positional_embeddings
+            if use_rope
             else None
+            )
+
+        def rope_for_tile(tile_idx, window_position):
+            """RoPE for this tile at its current (post-shift) canvas offset."""
+            if self.tiled_rope_cache is None:
+                return image_rotary_emb[tile_idx]
+            start_h, _, start_w, _ = window_position
+            return self.tiled_rope_cache.get(
+                offset=(start_h // p, start_w // p),
+                grid_size=(window_size[0] // p, window_size[1] // p),
             )
 
         # NOTE(MX)
@@ -684,7 +727,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                         encoder_hidden_states=prompt_embeds, 
                         timestep=timestep,
                         ofs=ofs_emb,
-                        image_rotary_emb=image_rotary_emb[tile_idx],
+                        image_rotary_emb=rope_for_tile(tile_idx, window_position),
                         attention_kwargs=attention_kwargs,
                         tile_index=tile_idx,
                         step_index=i,
@@ -1147,6 +1190,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         cache_thresh: float = 0.05,
         enable_region_aware_cache: bool = False,
         static_tile_cache_scale_factor: float = 1.0,
+        rope_mode: str = "local",
         save_k_history: bool = False,
         k_history_filename: Optional[str] = "k_history.json",
         enable_noise_pred_profile: bool = False,
@@ -1350,6 +1394,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
             enable_cache_residual_profile=enable_cache_residual_profile,
             enable_region_aware_cache=enable_region_aware_cache,
             static_tile_cache_scale_factor=static_tile_cache_scale_factor,
+            rope_mode=rope_mode,
         )
 
         if self.dist_manager.is_first_rank:

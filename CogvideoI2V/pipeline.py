@@ -70,6 +70,7 @@ def generate_video(
     adacache_rate_scale: float = 1.0,
     adacache_moreg: bool = False,
     legacy_k_estimator: bool = False,
+    rope_mode: str = "local",
 ):
     """
     Generates a video based on the given prompt and saves it to the specified path.
@@ -211,6 +212,7 @@ def generate_video(
             cache_thresh=cache_thresh,
             enable_region_aware_cache=enable_region_aware_cache,
             static_tile_cache_scale_factor=static_tile_cache_scale_factor,
+            rope_mode=rope_mode,
         )
         if dist.get_rank() == 0:
             output = output_result.frames[0]
@@ -296,6 +298,14 @@ if __name__ == "__main__":
                              "for upstream per-model codebook recalibration, which we do not perform.")
     parser.add_argument("--adacache_moreg", action="store_true",
                         help="Enable AdaCache motion regularization (hyperparameters are Open-Sora specific)")
+    parser.add_argument("--rope_mode", type=str, default="local",
+                        choices=["local", "extend", "ntk", "interp"],
+                        help="Tile positional encoding. 'local': legacy, every tile gets the same "
+                             "RoPE (causes duplicate objects at 2K/4K). 'extend': absolute canvas offset, native "
+                             "frequency spacing. 'ntk': absolute offset + NTK theta scaling (what "
+                             "CineScale does); preserves local detail while covering a larger canvas. "
+                             "'interp': naive position rescaling -- MEASURED to cause 5x colour "
+                             "flicker; kept for the ablation only.")
     parser.add_argument("--legacy_k_estimator", action="store_true",
                         help="Restore the pre-fix gain estimator, where k degenerates to 1.0 during "
                              "consecutive cache hits. For reproducing older numbers only.")
@@ -349,6 +359,7 @@ if __name__ == "__main__":
         adacache_rate_scale=args.adacache_rate_scale,
         adacache_moreg=args.adacache_moreg,
         legacy_k_estimator=args.legacy_k_estimator,
+        rope_mode=args.rope_mode,
     )
     end_time = time.time()
     logging.info(f"Total running time is {end_time - start_time:.2f} seconds")
