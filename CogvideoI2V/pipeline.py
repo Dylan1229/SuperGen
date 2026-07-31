@@ -69,6 +69,7 @@ def generate_video(
     teacache_storage: str = "latent",
     adacache_rate_scale: float = 1.0,
     adacache_moreg: bool = False,
+    legacy_k_estimator: bool = False,
 ):
     """
     Generates a video based on the given prompt and saves it to the specified path.
@@ -146,7 +147,12 @@ def generate_video(
                 rel_l1_thresh=teacache_rel_l1_thresh,
                 storage=teacache_storage,
             )
-        elif cache_method == "adacache":
+        if legacy_k_estimator:
+            # Reproduce the pre-fix gain estimator, where k collapses to 1.0 during
+            # skip runs (see modules/test_k_estimator_bug.py). Kept so the older
+            # measurements remain reproducible.
+            caching_transformer.freeze_output_history_on_skip = False
+        if cache_method == "adacache":
             caching_transformer.setup_adacache(
                 rate_scale=adacache_rate_scale,
                 apply_moreg=adacache_moreg,
@@ -290,6 +296,9 @@ if __name__ == "__main__":
                              "for upstream per-model codebook recalibration, which we do not perform.")
     parser.add_argument("--adacache_moreg", action="store_true",
                         help="Enable AdaCache motion regularization (hyperparameters are Open-Sora specific)")
+    parser.add_argument("--legacy_k_estimator", action="store_true",
+                        help="Restore the pre-fix gain estimator, where k degenerates to 1.0 during "
+                             "consecutive cache hits. For reproducing older numbers only.")
     args = parser.parse_args()
     dtype = torch.float16 if args.dtype == "float16" else torch.bfloat16
 
@@ -339,6 +348,7 @@ if __name__ == "__main__":
         teacache_storage=args.teacache_storage,
         adacache_rate_scale=args.adacache_rate_scale,
         adacache_moreg=args.adacache_moreg,
+        legacy_k_estimator=args.legacy_k_estimator,
     )
     end_time = time.time()
     logging.info(f"Total running time is {end_time - start_time:.2f} seconds")

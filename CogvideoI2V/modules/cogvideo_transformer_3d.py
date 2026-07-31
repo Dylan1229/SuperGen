@@ -37,6 +37,17 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
         # on each policy's own threshold).
         self.cache_stats = {"checked": 0, "skipped": 0}
 
+        # Gain-estimator (Eq. 6 `g_c`) state. `k` is a finite-difference estimate
+        # of dO/dI and is only meaningful when the output history spans the same
+        # interval as the input history -- i.e. right after two real computations.
+        # During a skip run the reconstructed output carries no new information, so
+        # we hold the last valid k instead of recomputing a degenerate one.
+        # Setting freeze_output_history_on_skip=False restores the legacy
+        # behaviour, where k collapses to exactly 1.0 (test_k_estimator_bug.py).
+        self.freeze_output_history_on_skip = True
+        self._last_valid_k = {}       # tile_index -> float
+        self._last_compute_step = {}  # tile_index -> int
+
         # K history tracking
         self.k_history = {}
         self.enable_k_tracking = False
@@ -82,6 +93,8 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
         self.thresh = thresh
         self.ret_steps = ret_steps
         self.cache_stats = {"checked": 0, "skipped": 0}
+        self._last_valid_k = {}
+        self._last_compute_step = {}
 
         # Initialize per-tile cache attributes
         for tile_idx in range(num_tiles):
@@ -124,6 +137,12 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
 
         cnt = step_index
         current_thresh = effective_cache_thresh if effective_cache_thresh is not None else self.thresh
+        # Default to recomputing. Without this, a step that satisfies neither branch
+        # below (possible when ret_steps <= 2, e.g. step_index == 2) would hit an
+        # UnboundLocalError on `should_calc`. Production uses ret_steps=5, which
+        # happens to avoid the gap, but failing closed is the safe default: an
+        # unclassified step must never be silently reused.
+        should_calc = True
         if cnt < self.ret_steps or cnt >= self.num_steps - 1:
             should_calc = True
             # self.dist_manager.set_tensor_in_buffer("accumulated_error", tile_index, 0.0)
@@ -140,13 +159,22 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
             prev_prev_input = self.prev_prev_raw_input.get_window_latent(*window_position)
             prev_input_change = (prev_raw_input - prev_prev_input).abs().mean()
 
-            k = output_change / prev_input_change
-            # _, _, _, h, w = k.shape
-            # k = k[:,:,:,h//2-20:h//2+20, w//2-35:w//2+35].mean()
+            # `k` estimates the local gain dO/dI. It is only valid when the output
+            # history spans the same one-step interval as the input history, which
+            # holds exactly when the previous step was really computed. Mid-skip the
+            # reconstructed output adds no information, so reuse the last valid k
+            # rather than recomputing a degenerate one (legacy: it became 1.0).
+            last_compute = self._last_compute_step.get(tile_index)
+            history_is_fresh = last_compute is not None and last_compute == step_index - 1
+            if history_is_fresh or not self.freeze_output_history_on_skip:
+                k = output_change / prev_input_change
+                self._last_valid_k[tile_index] = k
+            else:
+                k = self._last_valid_k.get(tile_index, output_change / prev_input_change)
 
             output_norm = prev_output.abs().mean()
             pred_change = k * (raw_input_change / output_norm)
-            logger.info(f"Tile {tile_index} at step {step_index}: k={k}, raw_input_change={raw_input_change}, output_norm={output_norm}")
+            logger.info(f"Tile {tile_index} at step {step_index}: k={k}, raw_input_change={raw_input_change}, output_norm={output_norm}, k_fresh={history_is_fresh}")
 
             intermediate_accumulate_error = self.accumulated_error.get_window_latent(*window_position) + pred_change
             self.accumulated_error.set_window_latent(intermediate_accumulate_error, *window_position)
@@ -171,7 +199,13 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
         logger.info(f"rank={self.dist_manager.rank} Cache hit, step {step_index} is skipped for tile {tile_index}")
         self.prev_prev_raw_input.set_window_latent(prev_raw_input, *window_position)
         self.previous_raw_input.set_window_latent(raw_input, *window_position)
-        self.prev_prev_output.set_window_latent(prev_output, *window_position)
+        if not self.freeze_output_history_on_skip:
+            # Legacy behaviour. Combined with forward()'s skip branch writing
+            # previous_output = raw_input + (frozen) cache_residual, this makes
+            # prev_output and prev_prev_output differ by exactly the raw-input
+            # delta, so k = output_change / prev_input_change collapses to 1.0 and
+            # the gain term of Eq. 6 is lost. See test_k_estimator_bug.py.
+            self.prev_prev_output.set_window_latent(prev_output, *window_position)
         return True, None
     
     def forward(
@@ -216,7 +250,10 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
             if self.dist_manager.tile_is_skipped(tile_index):
                 cache_residual = self.cache_residual.get_window_latent(*window_position)
                 result = raw_input + cache_residual
-                self.previous_output.set_window_latent(result, *window_position)
+                if not self.freeze_output_history_on_skip:
+                    # Legacy behaviour: overwriting the output reference with the
+                    # reconstructed value is what pins k at 1.0 (see above).
+                    self.previous_output.set_window_latent(result, *window_position)
                 if not return_dict:
                     return (result,)
                 return Transformer2DModelOutput(sample=result)
@@ -304,6 +341,10 @@ class CachingCogVideoXTransformer3DModel(CogVideoXTransformer3DModel):
             self.previous_raw_input.set_window_latent(raw_input, *window_position)
             self.prev_prev_output.set_window_latent(self.previous_output.get_window_latent(*window_position), *window_position)
             self.previous_output.set_window_latent(output, *window_position)
+            # Mark this tile as really computed at this step, so the next call knows
+            # whether its output history is one step old (k valid) or stale (hold k).
+            if step_index is not None:
+                self._last_compute_step[tile_index] = step_index
         #-------------------Profiling logic-------------------
         # Note: here if we want to record all the k and cache residual, we need to do it in the shifting step because we may do reuse in the non-shifting step. (skip recording current k and residual).
         # But because shifting will cause the k and residual to be different, we need to do it in the non-shifting step.
