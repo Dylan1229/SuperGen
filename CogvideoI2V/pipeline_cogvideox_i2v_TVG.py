@@ -310,6 +310,9 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         enable_region_aware_cache: bool = False,
         static_tile_cache_scale_factor: float = 1.0,
         rope_mode: str = "local",
+        detail_ladder: Optional[List[torch.Tensor]] = None,
+        detail_reinject_scale: float = 0.0,
+        denoise_start_offset: int = 0,
     ) -> Union[CogVideoXPipelineOutput, Tuple]:
         
         """
@@ -777,6 +780,33 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
                     **extra_step_kwargs,
                     return_dict=False,
                 )[0]
+
+                # Cosine detail re-injection (FreeScale, pipeline_freescale.py:897-899).
+                # Blend the noised upscaled source back in, weighted high early and
+                # decaying to ~0 late, so Stage 2 keeps being reminded of the
+                # structure it is supposed to be refining rather than re-inventing.
+                # Applied to the WHOLE canvas after fusion, not per tile, so tiles
+                # stay consistent with one another.
+                if detail_ladder is not None and detail_reinject_scale > 0.0:
+                    # `timesteps` here is already sliced by denoise_start_offset, so
+                    # index the full-schedule ladder with the offset restored.
+                    ladder_idx = min(i + denoise_start_offset, len(detail_ladder) - 1)
+                    cosine_factor = 0.5 * (1 + math.cos(
+                        math.pi * (self.scheduler.config.num_train_timesteps - t.item())
+                        / self.scheduler.config.num_train_timesteps))
+                    c1 = cosine_factor ** detail_reinject_scale
+                    src = detail_ladder[ladder_idx].to(latents_denoised.dtype)
+                    if src.shape == latents_denoised.shape:
+                        latents_denoised = latents_denoised * (1 - c1) + src * c1
+                        if i % 10 == 0:
+                            logger.info(
+                                f"[rank={self.dist_manager.rank}] detail re-inject "
+                                f"step {i} t={t.item()} c1={c1:.4f}")
+                    else:
+                        logger.warning(
+                            f"detail ladder shape {tuple(src.shape)} != latent "
+                            f"{tuple(latents_denoised.shape)}; skipping re-injection")
+
                 # tiled_latent_handler.torch_latent = latents_denoised
                 self.dist_manager.set_latents(latents_denoised)
 
@@ -1191,6 +1221,7 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         enable_region_aware_cache: bool = False,
         static_tile_cache_scale_factor: float = 1.0,
         rope_mode: str = "local",
+        detail_reinject_scale: float = 0.0,
         save_k_history: bool = False,
         k_history_filename: Optional[str] = "k_history.json",
         enable_noise_pred_profile: bool = False,
@@ -1359,6 +1390,37 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         else:
             renoised_latents = upscaled_latents
 
+        # Cosine detail re-injection ladder (FreeScale, pipeline_freescale.py:881-899).
+        #
+        # Stage 2 denoises a 3x-upscaled latent, and by the end of the trajectory the
+        # structure it inherited from Stage 1 has largely been re-generated -- which
+        # is where our mid-frequency texture deficit comes from (measured at 24% of
+        # native 720p). FreeScale's remedy is to keep re-injecting the *upscaled
+        # source* at every step, weighted by a cosine that starts high (trust the
+        # source) and decays to zero (trust the denoiser):
+        #
+        #     cosine_factor = 0.5 * (1 + cos(pi * (T_train - t) / T_train))
+        #     c1 = cosine_factor ** cosine_scale
+        #     latents = latents * (1 - c1) + noised_upscaled[i] * c1
+        #
+        # The ladder must use ONE noise draw across all timesteps (as upstream does),
+        # otherwise the re-injected term carries fresh noise each step and fights the
+        # denoiser instead of guiding it.
+        detail_ladder = None
+        if detail_reinject_scale > 0.0:
+            timesteps_full, _ = retrieve_timesteps(
+                self.scheduler, num_inference_steps, device=upscaled_latents.device)
+            ladder_noise = randn_tensor(
+                upscaled_latents.shape, generator=generator,
+                device=upscaled_latents.device, dtype=upscaled_latents.dtype)
+            detail_ladder = []
+            for ts in timesteps_full:
+                detail_ladder.append(self.scheduler.add_noise(
+                    upscaled_latents, ladder_noise, ts.unsqueeze(0)))
+            logger.info(
+                f"[rank={self.dist_manager.rank}]: detail re-injection ladder built "
+                f"({len(detail_ladder)} steps, cosine_scale={detail_reinject_scale})")
+
         stage2_result = self.tiling_call__(
             image=image,
             prompt=prompt,
@@ -1395,6 +1457,9 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
             enable_region_aware_cache=enable_region_aware_cache,
             static_tile_cache_scale_factor=static_tile_cache_scale_factor,
             rope_mode=rope_mode,
+            detail_ladder=detail_ladder,
+            detail_reinject_scale=detail_reinject_scale,
+            denoise_start_offset=num_inference_steps - upscale_res_steps,
         )
 
         if self.dist_manager.is_first_rank:

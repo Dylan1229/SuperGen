@@ -22,11 +22,30 @@ from modules import (
     CachingCogVideoXTransformer3DModel,
     TeaCacheCogVideoXTransformer3DModel,
     AdaCacheCogVideoXTransformer3DModel,
+    install_attention_scaling,
 )
 from pipeline_cogvideox_i2v_TVG import TiledCogVideoXImageToVideoPipeline
 from utils.distributed import DistributedManager
 
 logging.basicConfig(level=logging.INFO)
+
+# Default negative prompt for Stage-2 high-resolution refinement.
+#
+# We previously passed `negative_prompt=None`, i.e. an empty unconditional branch,
+# while both high-res competitors ship explicit blur/low-quality terms:
+#   CineScale  (cinescale_i2v14b.py): "...blurred details, ... worst quality, low
+#              quality, JPEG compression residue, ..."
+#   FreeSwim   (inference.py):        "Blurry face, low detail, smooth plastic
+#              skin, flat colors, lack of texture"
+# With CFG, the unconditional branch is what the guidance pushes AWAY from, so
+# naming blur/flatness there is what makes guidance actively favour detail. An
+# empty negative prompt wastes that.
+DETAIL_NEGATIVE_PROMPT = (
+    "blurry, blurred details, out of focus, soft focus, low detail, "
+    "smooth plastic texture, flat colors, lack of texture, oversmoothed, "
+    "low quality, worst quality, JPEG compression artifacts, overexposed, "
+    "washed out, static, dull"
+)
 # Recommended resolution for each model (width, height)
 RESOLUTION_MAP = {
     # cogvideox1.5-*
@@ -71,6 +90,9 @@ def generate_video(
     adacache_moreg: bool = False,
     legacy_k_estimator: bool = False,
     rope_mode: str = "local",
+    negative_prompt: Optional[str] = None,
+    attn_scale_coef: float = 1.0,
+    detail_reinject_scale: float = 0.0,
 ):
     """
     Generates a video based on the given prompt and saves it to the specified path.
@@ -158,6 +180,8 @@ def generate_video(
                 rate_scale=adacache_rate_scale,
                 apply_moreg=adacache_moreg,
             )
+        if attn_scale_coef != 1.0:
+            install_attention_scaling(caching_transformer, attn_scale_coef)
         pipe.transformer = caching_transformer
         # NOTE(MX)
         dist_manager = DistributedManager("allgather", enable_intra_tile_cache)
@@ -213,6 +237,8 @@ def generate_video(
             enable_region_aware_cache=enable_region_aware_cache,
             static_tile_cache_scale_factor=static_tile_cache_scale_factor,
             rope_mode=rope_mode,
+            negative_prompt=negative_prompt,
+            detail_reinject_scale=detail_reinject_scale,
         )
         if dist.get_rank() == 0:
             output = output_result.frames[0]
@@ -298,6 +324,18 @@ if __name__ == "__main__":
                              "for upstream per-model codebook recalibration, which we do not perform.")
     parser.add_argument("--adacache_moreg", action="store_true",
                         help="Enable AdaCache motion regularization (hyperparameters are Open-Sora specific)")
+    parser.add_argument("--detail_reinject_scale", type=float, default=0.0,
+                        help="Cosine detail re-injection strength (FreeScale uses 2.0). 0 = off. "
+                             "Blends the noised upscaled source back in each step, weighted by "
+                             "cos^scale, so Stage 2 refines rather than re-generates.")
+    parser.add_argument("--negative_prompt", type=str, default=None,
+                        help="Negative prompt for CFG. Pass the literal string 'detail' to use the "
+                             "built-in blur/low-quality list (DETAIL_NEGATIVE_PROMPT), which is what "
+                             "CineScale and FreeSwim both do. Default None = empty uncond branch.")
+    parser.add_argument("--attn_scale_coef", type=float, default=1.0,
+                        help="Attention logit scaling coefficient. 1.0 = stock 1/sqrt(d). "
+                             "CineScale uses 1.5-2.0 via log(tokens*coef, tokens); >1 sharpens the "
+                             "softmax, countering entropy dilution at high token counts.")
     parser.add_argument("--rope_mode", type=str, default="local",
                         choices=["local", "extend", "ntk", "interp"],
                         help="Tile positional encoding. 'local': legacy, every tile gets the same "
@@ -311,6 +349,11 @@ if __name__ == "__main__":
                              "consecutive cache hits. For reproducing older numbers only.")
     args = parser.parse_args()
     dtype = torch.float16 if args.dtype == "float16" else torch.bfloat16
+
+    negative_prompt = args.negative_prompt
+    if negative_prompt == "detail":
+        negative_prompt = DETAIL_NEGATIVE_PROMPT
+        logging.info(f"Using built-in detail negative prompt: {negative_prompt}")
 
     shift_timesteps = None
     if args.shift_timesteps:
@@ -360,6 +403,9 @@ if __name__ == "__main__":
         adacache_moreg=args.adacache_moreg,
         legacy_k_estimator=args.legacy_k_estimator,
         rope_mode=args.rope_mode,
+        negative_prompt=negative_prompt,
+        attn_scale_coef=args.attn_scale_coef,
+        detail_reinject_scale=args.detail_reinject_scale,
     )
     end_time = time.time()
     logging.info(f"Total running time is {end_time - start_time:.2f} seconds")
