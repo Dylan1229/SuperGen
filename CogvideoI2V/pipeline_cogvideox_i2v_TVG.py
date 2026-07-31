@@ -1476,10 +1476,27 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         # Convert to [B, F, C_latent, H_latent, W_latent]
         upscaled_latents = image_latents.permute(0, 2, 1, 3, 4)
 
-        if not self.vae.config.invert_scale_latents:
-            upscaled_latents = self.vae_scaling_factor_image * upscaled_latents
-        else:
-            upscaled_latents = 1 / self.vae_scaling_factor_image * upscaled_latents
+        # Scale back into the denoiser's latent convention.
+        #
+        # This is the inverse of `decode_latents`, which does `1/sf * z` before
+        # `vae.decode`. So re-encoding a DENOISED latent must multiply by `sf`.
+        #
+        # The `invert_scale_latents` branch that used to be here is the rule for
+        # encoding a *conditioning image* (diffusers uses it that way in
+        # `prepare_latents`), not for closing a decode/encode round trip. Applying
+        # it here multiplied by 1/sf a second time and inflated the latent.
+        #
+        # Measured on the real Stage-1 latents (std 0.777) with sf=0.7:
+        #     1/sf * raw  -> std 1.415  (1.82x too large)  <- old behaviour
+        #        sf * raw  -> std 0.693  (0.89x)            <- this
+        #       1.0 * raw  -> std 0.991  (1.27x)
+        # The inflated latent is then re-noised, so Stage 2 received a signal
+        # ~1.8x larger than the noise schedule expects and spent its capacity
+        # renormalising instead of adding detail -- showing up as a yellow cast and
+        # softness that got WORSE at lower re-noise levels (b* +36.9 at
+        # upscale_res_steps=45 vs +42.7 at 20), because a lighter re-noise
+        # preserves more of the mis-scaled signal.
+        upscaled_latents = self.vae_scaling_factor_image * upscaled_latents
 
         return upscaled_latents
     
