@@ -93,6 +93,9 @@ def generate_video(
     negative_prompt: Optional[str] = None,
     attn_scale_coef: float = 1.0,
     detail_reinject_scale: float = 0.0,
+    upscale_mode: str = "pixel",
+    latent_upscale_interp: str = "trilinear",
+    latent_upscale_clamp: bool = False,
 ):
     """
     Generates a video based on the given prompt and saves it to the specified path.
@@ -239,6 +242,9 @@ def generate_video(
             rope_mode=rope_mode,
             negative_prompt=negative_prompt,
             detail_reinject_scale=detail_reinject_scale,
+            upscale_mode=upscale_mode,
+            latent_upscale_interp=latent_upscale_interp,
+            latent_upscale_clamp=latent_upscale_clamp,
         )
         if dist.get_rank() == 0:
             output = output_result.frames[0]
@@ -324,6 +330,19 @@ if __name__ == "__main__":
                              "for upstream per-model codebook recalibration, which we do not perform.")
     parser.add_argument("--adacache_moreg", action="store_true",
                         help="Enable AdaCache motion regularization (hyperparameters are Open-Sora specific)")
+    parser.add_argument("--upscale_mode", type=str, default="pixel", choices=["pixel", "latent"],
+                        help="Where to upscale between stages. 'pixel': decode -> bicubic -> re-encode "
+                             "(ours historically, and FreeSwim's choice). 'latent': bicubic on the "
+                             "latent directly, no VAE round trip -- what CineScale and our own Hunyuan "
+                             "path do; CineScale argues pixel blur hurts video.")
+    parser.add_argument("--latent_upscale_interp", type=str, default="trilinear",
+                        choices=["trilinear", "bicubic", "bilinear", "nearest", "area"],
+                        help="Resampler for --upscale_mode latent. 'trilinear' is what CineScale "
+                             "uses and cannot overshoot; 'bicubic' is sharper but overshoots, and "
+                             "the non-linear VAE decoder turns that into visible tearing.")
+    parser.add_argument("--latent_upscale_clamp", action="store_true",
+                        help="Clip the upscaled latent to the source latent's range. Ours, not in "
+                             "CineScale; removes residual overshoot without smoothing.")
     parser.add_argument("--detail_reinject_scale", type=float, default=0.0,
                         help="Cosine detail re-injection strength (FreeScale uses 2.0). 0 = off. "
                              "Blends the noised upscaled source back in each step, weighted by "
@@ -406,6 +425,9 @@ if __name__ == "__main__":
         negative_prompt=negative_prompt,
         attn_scale_coef=args.attn_scale_coef,
         detail_reinject_scale=args.detail_reinject_scale,
+        upscale_mode=args.upscale_mode,
+        latent_upscale_interp=args.latent_upscale_interp,
+        latent_upscale_clamp=args.latent_upscale_clamp,
     )
     end_time = time.time()
     logging.info(f"Total running time is {end_time - start_time:.2f} seconds")

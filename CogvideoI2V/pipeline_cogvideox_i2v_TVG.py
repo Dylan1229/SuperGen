@@ -1222,6 +1222,9 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         static_tile_cache_scale_factor: float = 1.0,
         rope_mode: str = "local",
         detail_reinject_scale: float = 0.0,
+        upscale_mode: str = "pixel",
+        latent_upscale_interp: str = "trilinear",
+        latent_upscale_clamp: bool = False,
         save_k_history: bool = False,
         k_history_filename: Optional[str] = "k_history.json",
         enable_noise_pred_profile: bool = False,
@@ -1338,7 +1341,24 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         logger.info(f"=== Stage 2: Upscale and Refine ({height}x{width}) ===")
         start_time_upsampling = time.time()
         # Upscale in pixel space
-        upscaled_latents = self._upscale_video(
+        # Which space to upscale in. CineScale uses latent (trilinear,
+        # wan_video_pro.py:390) and argues pixel-space blur "will hurt the video
+        # generation"; Hunyuan's own path is also latent. FreeSwim uses pixel
+        # (cv2.resize + re-encode). Ours was pixel; expose both so it is measured
+        # rather than inherited.
+        if upscale_mode == "latent":
+            upscaled_latents = self._upscale_latents(
+                low_res_latents,
+                target_height=height // self.vae_scale_factor_spatial,
+                target_width=width // self.vae_scale_factor_spatial,
+                mode=latent_upscale_interp,
+                clamp=latent_upscale_clamp,
+            )
+            logger.info(f"[rank={self.dist_manager.rank}]: upscaled in LATENT space "
+                        f"({latent_upscale_interp}, clamp={latent_upscale_clamp}, "
+                        f"no decode/encode round trip)")
+        else:
+            upscaled_latents = self._upscale_video(
             low_res_latents, 
             target_height=height,
             target_width=width,
@@ -1470,38 +1490,52 @@ class TiledCogVideoXImageToVideoPipeline(CogVideoXImageToVideoPipeline):
         logger.info(f"[rank={self.dist_manager.rank}]: === Two-Stage Generation Completed ===")
         return stage2_result
 
-    def _upscale_latents(self, latents: torch.Tensor, target_height: int, target_width: int,) -> torch.Tensor:
-        """Upscale latents using interpolation in latent space"""
+    def _upscale_latents(self, latents: torch.Tensor, target_height: int, target_width: int,
+                         mode: str = "trilinear", clamp: bool = False) -> torch.Tensor:
+        """Upscale latents in latent space.
+
+        `mode`:
+          trilinear -- 3D interpolation over (frames, h, w). This is what CineScale
+              uses (`diffsynth/pipelines/wan_video_pro.py:390`). Being linear it
+              cannot overshoot, unlike bicubic.
+          bicubic   -- 2D per-frame. Sharper in principle, but overshoots, and the
+              non-linear VAE decoder turns latent overshoot into visible pixel
+              tearing (measured ringing_index 0.244 vs 0.130 for the pixel path).
+
+        `clamp` (ours, NOT in CineScale) additionally clips the result to the source
+        latent's range, which removes any residual overshoot without smoothing.
+        """
         import torch.nn.functional as F
-        
-        # latents shape: [batch, channels, frames, height, width]
-        batch_size, channels, num_frames, height, width = latents.shape
-        
-        # Permute to [batch, frames, channels, height, width] for easier processing
-        latents = latents.permute(0, 2, 1, 3, 4)
-        
-        # Reshape to [batch * frames, channels, height, width] for interpolation
-        latents_reshaped = latents.contiguous().view(batch_size * num_frames, channels, height, width)
-        
-        # Upscale using bicubic interpolation
-        upscaled = F.interpolate(
-            latents_reshaped,
-            size=(target_height, target_width),
-            mode='bicubic',
-            align_corners=False
-        )
-        
-        # Reshape back to [batch, frames, channels, height, width]
-        upscaled = upscaled.view(batch_size, num_frames, channels, target_height, target_width)
-        
-        # Permute back to [batch, channels, frames, height, width]
-        upscaled = upscaled.permute(0, 2, 1, 3, 4)
 
-        if not self.vae.config.invert_scale_latents:
-            upscaled = self.vae_scaling_factor_image * upscaled
+        # latents shape here: [batch, frames, channels, height, width]
+        batch_size, num_frames, channels, height, width = latents.shape
+        lo, hi = latents.amin(), latents.amax()
+
+        if mode == "trilinear":
+            # F.interpolate's trilinear wants [N, C, D, H, W] with D the depth we
+            # want to interpolate along, so put channels first and frames as depth.
+            x = latents.permute(0, 2, 1, 3, 4)          # [B, C, F, H, W]
+            upscaled = F.interpolate(
+                x, size=(num_frames, target_height, target_width),
+                mode="trilinear", align_corners=False,
+            )
+            upscaled = upscaled.permute(0, 2, 1, 3, 4)  # back to [B, F, C, H, W]
         else:
-            upscaled = 1 / self.vae_scaling_factor_image * upscaled
+            x = latents.contiguous().view(batch_size * num_frames, channels, height, width)
+            up = F.interpolate(
+                x, size=(target_height, target_width), mode=mode,
+                **({"align_corners": False} if mode in ("bicubic", "bilinear") else {}),
+            )
+            upscaled = up.view(batch_size, num_frames, channels, target_height, target_width)
 
+        if clamp:
+            upscaled = upscaled.clamp(lo, hi)
+
+        # NO scaling here, deliberately. Unlike `_upscale_video`, this path never
+        # leaves latent space -- input and output are both in the denoiser's
+        # convention -- so resampling is the whole operation and any scaling factor
+        # would corrupt it. (The `invert_scale_latents` branch that used to be here
+        # inflated the latent by 1/sf, the same defect fixed in `_upscale_video`.)
         return upscaled
 
     def _upscale_video(self, latents: torch.Tensor, target_height: int, target_width: int, generator: Optional[torch.Generator] = None) -> torch.Tensor:
