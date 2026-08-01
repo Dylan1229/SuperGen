@@ -148,12 +148,30 @@ class WanTiledStage2:
         shift_timesteps: Optional[List[int]] = None,
         seed_g=None,
         enable_cache: bool = False,
+        y_canvas: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Stage-2 loop: for each step, for each tile, predict and fuse.
 
         `latent` is the full upscaled canvas [C, F, H, W]. Tiles are cut from it
         with the same sliding-window schedule the other backbones use.
+
+        `y_canvas` is Wan's I2V conditioning ([mask | encoded first frame]) at CANVAS
+        size. It must be cut with the SAME window as the latent -- feeding the whole
+        canvas `y` to a tile would both mismatch the sequence length and condition
+        every tile on the entire first frame, which is exactly the "every tile draws
+        the whole scene" failure we are trying to remove.
         """
+        # Stage 1 may have left the DiT on the CPU (Wan's `offload_model` moves it
+        # there between the cond/uncond calls). Bring it back before the tile loop,
+        # or every forward fails on a device mismatch.
+        self.wan.model.to(self.device)
+        # Wan keeps fp32 parameters and relies on autocast to run in bf16
+        # (image2video.py:258 wraps its whole loop in
+        # `amp.autocast(dtype=self.param_dtype)`). Without the same context the very
+        # first matmul fails on a BFloat16-vs-Float mismatch.
+        self._param_dtype = getattr(self.wan, "param_dtype", torch.bfloat16)
+        logger.info(f"Wan Stage-2 autocast dtype: {self._param_dtype}")
+
         C, Fr, H, W = latent.shape
         wcfg = SlidingWindowConfig(H, W, self.loop_step)
         wp = wcfg.get_window_params()
@@ -166,12 +184,17 @@ class WanTiledStage2:
         # TiledLatentTensor2D wants [B, F, C, H, W]; Wan carries [C, F, H, W].
         canvas = TiledLatentTensor2D(
             latent_tensor=latent.permute(1, 0, 2, 3).unsqueeze(0).contiguous())
+        y_tiler = None
+        if y_canvas is not None:
+            y_tiler = TiledLatentTensor2D(
+                latent_tensor=y_canvas.permute(1, 0, 2, 3).unsqueeze(0).contiguous())
 
         if enable_cache and self.cache is None:
             self.setup_cache(canvas.torch_latent.shape, num_tiles,
                              len(timesteps), thresh=0.09, dtype=latent.dtype)
 
         shift_h = shift_w = 0
+        autocast_ctx = torch.amp.autocast("cuda", dtype=self._param_dtype)
         for step_idx, t in enumerate(timesteps):
             if shift_timesteps is not None and step_idx in shift_timesteps:
                 shift_h = (shift_h + 1) % max(self.loop_step, 1)
@@ -203,10 +226,18 @@ class WanTiledStage2:
                     # Wan's model takes a list of [C, F, h, w].
                     model_in = [tile.squeeze(0).permute(1, 0, 2, 3).contiguous()]
                     ts = torch.stack([t]).to(self.device)
-                    pred_c = self.wan.model(model_in, t=ts, **arg_c)[0]
-                    pred_u = self.wan.model(model_in, t=ts, **arg_null)[0]
+                    # Per-tile I2V conditioning, cut with the same window.
+                    kw_c, kw_null = dict(arg_c), dict(arg_null)
+                    if y_tiler is not None:
+                        y_tile = y_tiler.get_window_latent(*window)
+                        y_tile = y_tile.squeeze(0).permute(1, 0, 2, 3).contiguous()
+                        kw_c["y"] = [y_tile]
+                        kw_null["y"] = [y_tile]
+                    with autocast_ctx, torch.no_grad():
+                        pred_c = self.wan.model(model_in, t=ts, **kw_c)[0]
+                        pred_u = self.wan.model(model_in, t=ts, **kw_null)[0]
                     pred = pred_u + guide_scale * (pred_c - pred_u)
-                    out = pred.permute(1, 0, 2, 3).unsqueeze(0)    # back to [1,F,C,h,w]
+                    out = pred.permute(1, 0, 2, 3).unsqueeze(0).to(canvas.torch_latent.dtype)
                     if enable_cache and self.cache is not None:
                         self.cache.record(step_idx, tile_idx, raw, out, window)
 
