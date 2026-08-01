@@ -169,7 +169,15 @@ class DistributedManager:
 
     
     def set_latents(self, t):
-        assert t.shape == self.latent_ring2d.torch_latent.shape and t.dtype == self.latent_ring2d.torch_latent.dtype
+        assert t.shape == self.latent_ring2d.torch_latent.shape, (
+            f"set_latents shape mismatch: got {tuple(t.shape)}, expected "
+            f"{tuple(self.latent_ring2d.torch_latent.shape)}")
+        # Schedulers return fp32 even when the ring buffer is fp16 (Hunyuan runs the
+        # DiT in fp16 but its scheduler upcasts). Cast rather than assert: the shapes
+        # are what must match, and refusing a dtype difference here just breaks the
+        # Stage-2 loop on that backbone.
+        if t.dtype != self.latent_ring2d.torch_latent.dtype:
+            t = t.to(self.latent_ring2d.torch_latent.dtype)
         self.latent_ring2d.torch_latent = t
 
 
