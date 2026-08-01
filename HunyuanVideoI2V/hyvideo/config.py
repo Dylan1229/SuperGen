@@ -510,6 +510,17 @@ def add_inference_args(parser: argparse.ArgumentParser):
         help="Factor to upscale the video resolution in two-stage generation.",
     )
     group.add_argument(
+        "--rope-mode",
+        type=str,
+        default="local",
+        choices=["local", "extend", "ntk"],
+        help="Tile positional encoding for two-stage tiling. 'local': legacy, every "
+             "tile receives the same RoPE and believes it sits at the canvas origin, "
+             "which makes each tile render the whole prompt (duplicate objects at "
+             "2K/4K). 'extend': slice the frequency table at the tile's absolute "
+             "canvas offset. 'ntk': additionally scale theta, as CineScale does.",
+    )
+    group.add_argument(
         "--upscale-res-steps",
         type=int,
         default=0,

@@ -54,6 +54,7 @@ from ...text_encoder import TextEncoder
 from ...modules import HYVideoDiffusionTransformer
 from ...utils.data_utils import black_image
 from utils import SlidingWindowConfig
+from ...modules.tiled_rope import HunyuanTiledRope
 from utils.distributed import DistributedManager
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -1410,6 +1411,7 @@ class HunyuanVideoPipeline(DiffusionPipeline):
         semantic_images=None,
         shift_timesteps: Optional[List[int]] = None,
         upscale_factor: int = 2,
+        rope_mode: str = "local",
         loop_step: int = 8,
         noise_fusion_method: str = "weighted_average",
         tile_overlap: int = 0,  # Parameter for overlap support
@@ -1633,6 +1635,41 @@ class HunyuanVideoPipeline(DiffusionPipeline):
         # 4. Prepare rotary position embeddings for tiling 
         # Calculate rotary embeddings for the actual window size that will be used
         window_freqs_cos, window_freqs_sin = self.get_rotary_pos_embed(video_length, int(height / upscale_factor), int(width / upscale_factor))
+
+        # ---- canvas-absolute RoPE ------------------------------------------------
+        # The call above has no tile position in it, so every tile receives the same
+        # table and believes it sits at the canvas origin. Combined with each tile
+        # getting the full global prompt, that makes every tile render the whole
+        # scene -- the duplicate-object artifact at 2K/4K. `rope_mode != "local"`
+        # instead slices at each tile's absolute offset. Verified in
+        # hyvideo/modules/test_tiled_rope.py to reproduce this exact tensor at
+        # offset (0,0,0), so it is a strict generalisation.
+        self._tiled_rope = None
+        if rope_mode != "local":
+            _ps = self.transformer.config.patch_size
+            _ps = _ps if isinstance(_ps, (list, tuple)) else [_ps] * 3
+            _head_dim = self.transformer.config.hidden_size // self.transformer.config.heads_num
+            _rope_dims = self.transformer.config.rope_dim_list or [_head_dim // 3] * 3
+            # tile / canvas extents in PATCH units
+            _tile_f = (video_length - 1) // 4 + 1
+            _tile = (_tile_f // _ps[0],
+                     int(height / upscale_factor) // 8 // _ps[1],
+                     int(width / upscale_factor) // 8 // _ps[2])
+            _canvas = (_tile_f // _ps[0], (height // 8) // _ps[1], (width // 8) // _ps[2])
+            self._tiled_rope = HunyuanTiledRope(
+                rope_dim_list=_rope_dims, rope_sizes=_tile, canvas_sizes=_canvas,
+                trained_sizes=_tile, theta=self.args.rope_theta, mode=rope_mode,
+            )
+            logger.info(f"canvas-absolute RoPE (mode={rope_mode}): tile={_tile} canvas={_canvas}")
+
+        def rope_for_tile(window_position):
+            """RoPE for this tile at its current (post-shift) canvas offset."""
+            if self._tiled_rope is None:
+                return window_freqs_cos, window_freqs_sin
+            start_h, _, start_w, _ = window_position
+            _ps2 = self.transformer.config.patch_size
+            _ps2 = _ps2 if isinstance(_ps2, (list, tuple)) else [_ps2] * 3
+            return self._tiled_rope.get((0, start_h // _ps2[1], start_w // _ps2[2]))
         # window_n_tokens = window_freqs_cos.shape[0] * upscale_factor**2
         window_n_tokens = n_tokens
         logger.info(f"window_n_tokens: {window_n_tokens}, n_tokens: {n_tokens}")
@@ -1883,8 +1920,8 @@ class HunyuanVideoPipeline(DiffusionPipeline):
                                                     prompt_embeds, 
                                                     prompt_mask, 
                                                     prompt_embeds_2, 
-                                                    window_freqs_cos, 
-                                                    window_freqs_sin, 
+                                                    *rope_for_tile(window_position),
+                                                    
                                                     guid_p, 
                                                     tile_idx,
                                                     i,
@@ -2099,6 +2136,7 @@ class HunyuanVideoPipeline(DiffusionPipeline):
         img_latents: Optional[torch.Tensor] = None,
         semantic_images=None,
         upscale_factor: int = 2,
+        rope_mode: str = "local",
         upscale_res_steps: int = 45,  # Stage 2 steps
         save_intermediate: bool = False,
         output_dir: Optional[str] = None,
@@ -2326,6 +2364,7 @@ class HunyuanVideoPipeline(DiffusionPipeline):
                 img_latents=None,
                 semantic_images=semantic_images,
                 upscale_factor=upscale_factor,
+                rope_mode=rope_mode,
                 shift_timesteps=shift_timesteps,
                 loop_step=loop_step,
                 enable_intra_tile_cache=enable_intra_tile_cache,

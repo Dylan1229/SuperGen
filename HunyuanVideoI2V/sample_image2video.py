@@ -66,6 +66,7 @@ def main():
         # two-stage-generation
         two_stage_generation=args.two_stage_generation,
         upscale_factor=args.upscale_factor,
+        rope_mode=args.rope_mode,
         upscale_res_steps=args.upscale_res_steps,
         save_intermediate=args.save_intermediate,
         output_dir=args.output_dir,

@@ -733,6 +733,7 @@ class HunyuanVideoSampler(Inference):
         # Two-stage generation parameters
         two_stage_generation=False,
         upscale_factor=2,
+        rope_mode="local",
         upscale_res_steps=0,
         save_intermediate=False,
         output_dir=None,
@@ -946,6 +947,7 @@ class HunyuanVideoSampler(Inference):
                 img_latents=img_latents,
                 semantic_images=semantic_images,
                 upscale_factor=upscale_factor,
+                rope_mode=rope_mode,
                 upscale_res_steps=upscale_res_steps,
                 save_intermediate=save_intermediate,
                 output_dir=output_dir,
