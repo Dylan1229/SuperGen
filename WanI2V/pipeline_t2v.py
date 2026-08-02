@@ -44,7 +44,8 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 
-from pipeline import broadcast_stage1, rank0_only_stage1  # noqa: E402
+from pipeline import (broadcast_stage1, broadcast_upscaled,  # noqa: E402
+                      rank0_only_stage1)
 
 
 def setup_distributed(device_id, enable_cache):
@@ -171,7 +172,14 @@ def main():
 
     # ---------------------------------------------------------------- Stage 2
     t_up = time.time()
-    upscaled = stage2.upscale_pixel(s1_latent, a.height, a.width)
+    # rank 0 only, then broadcast. Every rank was running the identical
+    # decode->bicubic->encode over the whole canvas, which at 4K is both N-times
+    # wasted work and N concurrent multi-GB VAE passes on one node.
+    if dist_manager is None or dist_manager.is_first_rank:
+        upscaled = stage2.upscale_pixel(s1_latent, a.height, a.width)
+    else:
+        upscaled = None
+    upscaled = broadcast_upscaled(upscaled, dist_manager, cfg, a, device_id)
     logger.info(f"Upsampling Running time: {time.time() - t_up:.4f} seconds "
                 f"-> latent {tuple(upscaled.shape)}")
 

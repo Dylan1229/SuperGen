@@ -75,6 +75,27 @@ class rank0_only_stage1:
         return False
 
 
+def broadcast_upscaled(upscaled, dist_manager, cfg, a, device_id):
+    """Share rank 0's upscaled Stage-2 starting latent with every rank.
+
+    Same derived-shape trick as `broadcast_stage1`, at the target resolution.
+    """
+    if dist_manager is None:
+        return upscaled
+    import torch.distributed as dist
+    lat_f = (a.num_frames - 1) // cfg.vae_stride[0] + 1
+    shape = (16, lat_f, a.height // cfg.vae_stride[1], a.width // cfg.vae_stride[2])
+    dev = torch.device(f"cuda:{device_id}")
+    if upscaled is None:
+        upscaled = torch.zeros(shape, device=dev, dtype=torch.float32)
+    else:
+        upscaled = upscaled.to(dev, torch.float32).contiguous()
+        assert tuple(upscaled.shape) == shape, (
+            f"upscaled latent {tuple(upscaled.shape)} != expected {shape}")
+    dist.broadcast(upscaled, src=dist_manager.first_rank)
+    return upscaled
+
+
 def setup_distributed(device_id, enable_cache):
     """Join the process group if launched under torchrun; else stay single-process.
 
@@ -245,7 +266,14 @@ def main():
     t_up = time.time()
     lat_h = a.height // cfg.vae_stride[1]
     lat_w = a.width // cfg.vae_stride[2]
-    upscaled = stage2.upscale_pixel(s1_latent, a.height, a.width)
+    # rank 0 only, then broadcast. Every rank was running the identical
+    # decode->bicubic->encode over the whole canvas, which at 4K is both N-times
+    # wasted work and N concurrent multi-GB VAE passes on one node.
+    if dist_manager is None or dist_manager.is_first_rank:
+        upscaled = stage2.upscale_pixel(s1_latent, a.height, a.width)
+    else:
+        upscaled = None
+    upscaled = broadcast_upscaled(upscaled, dist_manager, cfg, a, device_id)
     logger.info(f"Upsampling Running time: {time.time() - t_up:.4f} seconds "
                 f"-> latent {tuple(upscaled.shape)}")
 
