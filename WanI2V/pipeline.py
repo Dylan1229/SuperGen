@@ -42,6 +42,39 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 
+class rank0_only_stage1:
+    """Let rank 0 run Wan's `generate()` while the other ranks wait elsewhere.
+
+    `wan/image2video.py:347` ends `generate()` with an unconditional
+    `dist.barrier()`, and `text2video.py` does the same. That is correct for Wan's
+    own usage, where every rank calls generate() together under sequence
+    parallelism. We call it on rank 0 only -- Stage 1 is the untouched base model and
+    identical everywhere, so running it N times would waste N-1 GPUs -- and then that
+    barrier deadlocks: rank 0 blocks in it while ranks 1..N-1 are already blocked in
+    the Stage-1 broadcast that follows.
+
+    Rather than fork the vendored Wan code, `dist.barrier` is a no-op for the
+    duration of the Stage-1 call. Nothing inside `generate()` needs it: it is a
+    single-rank computation here, and the real synchronisation is the broadcast
+    immediately after.
+
+    Found by py-spy: rank 0 sat in barrier (distributed_c10d.py:4164) under
+    generate() (image2video.py:350) with the GPU at 100% and memory flat, which reads
+    as "still working" from nvidia-smi alone.
+    """
+
+    def __enter__(self):
+        import torch.distributed as dist
+        self._dist = dist
+        self._saved = dist.barrier
+        dist.barrier = lambda *a, **k: None
+        return self
+
+    def __exit__(self, *exc):
+        self._dist.barrier = self._saved
+        return False
+
+
 def setup_distributed(device_id, enable_cache):
     """Join the process group if launched under torchrun; else stay single-process.
 
@@ -187,12 +220,14 @@ def main():
         is_rank0 = dist_manager is None or dist_manager.is_first_rank
         if is_rank0:
             logger.info("Stage 1: generating the low-resolution guide")
-            s1_video = pipe.generate(
-                a.prompt, img, max_area=s1_h * s1_w, frame_num=a.num_frames,
-                shift=a.shift, sampling_steps=a.num_inference_steps,
-                guide_scale=a.guidance_scale, seed=a.seed, offload_model=a.offload_model,
-                n_prompt=a.negative_prompt or "",
-            )
+            with rank0_only_stage1():
+                s1_video = pipe.generate(
+                    a.prompt, img, max_area=s1_h * s1_w, frame_num=a.num_frames,
+                    shift=a.shift, sampling_steps=a.num_inference_steps,
+                    guide_scale=a.guidance_scale, seed=a.seed,
+                    offload_model=a.offload_model,
+                    n_prompt=a.negative_prompt or "",
+                )
             s1_latent = pipe.vae.encode([s1_video])[0]
             if a.stage1_latents_path:
                 os.makedirs(os.path.dirname(a.stage1_latents_path) or ".", exist_ok=True)

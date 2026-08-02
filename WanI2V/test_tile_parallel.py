@@ -128,5 +128,35 @@ def main():
     dist.destroy_process_group()
 
 
+def test_barrier_guard():
+    """rank0_only_stage1 must neutralise the barrier inside Wan's generate().
+
+    No GPU or process group needed: what is under test is that the patch is applied
+    and, crucially, restored -- leaving barrier stubbed would silently break every
+    later collective.
+    """
+    import torch.distributed as dist
+    from pipeline import rank0_only_stage1
+
+    original = dist.barrier
+    with rank0_only_stage1():
+        assert dist.barrier is not original, "barrier was not suppressed"
+        dist.barrier()          # would raise without a process group if real
+    assert dist.barrier is original, "barrier was not restored"
+
+    # Restored even when generate() raises, or a failed Stage 1 would poison the
+    # remaining collectives.
+    try:
+        with rank0_only_stage1():
+            raise RuntimeError("stage 1 blew up")
+    except RuntimeError:
+        pass
+    assert dist.barrier is original, "barrier was not restored after an exception"
+    print("PASS: rank0_only_stage1 suppresses and restores dist.barrier")
+
+
 if __name__ == "__main__":
-    main()
+    if os.environ.get("TEST_BARRIER_ONLY"):
+        test_barrier_guard()
+    else:
+        main()

@@ -44,7 +44,7 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 
-from pipeline import broadcast_stage1  # noqa: E402  (same derived-shape logic)
+from pipeline import broadcast_stage1, rank0_only_stage1  # noqa: E402
 
 
 def setup_distributed(device_id, enable_cache):
@@ -149,12 +149,13 @@ def main():
         # rank 0 only, then broadcast -- see pipeline.py's note.
         if dist_manager is None or dist_manager.is_first_rank:
             logger.info("Stage 1: generating the low-resolution guide")
-            s1_video = pipe.generate(
-                a.prompt, size=(s1_w, s1_h), frame_num=a.num_frames, shift=a.shift,
-                sampling_steps=a.num_inference_steps, guide_scale=a.guidance_scale,
-                seed=a.seed, offload_model=a.offload_model,
-                n_prompt=a.negative_prompt or "",
-            )
+            with rank0_only_stage1():
+                s1_video = pipe.generate(
+                    a.prompt, size=(s1_w, s1_h), frame_num=a.num_frames, shift=a.shift,
+                    sampling_steps=a.num_inference_steps, guide_scale=a.guidance_scale,
+                    seed=a.seed, offload_model=a.offload_model,
+                    n_prompt=a.negative_prompt or "",
+                )
             s1_latent = pipe.vae.encode([s1_video])[0]
             if a.stage1_latents_path:
                 os.makedirs(os.path.dirname(a.stage1_latents_path) or ".", exist_ok=True)
