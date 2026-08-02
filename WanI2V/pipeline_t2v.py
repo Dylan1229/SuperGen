@@ -60,7 +60,13 @@ def setup_distributed(device_id, enable_cache):
         return None
     torch.cuda.set_device(device_id)
     if not dist.is_initialized():
-        dist.init_process_group(backend="nccl")
+        # NCCL's 10-minute default is shorter than Stage 1. Stage 1 runs on rank 0
+        # alone (50 steps at ~13 s/it is ~11 min at 4K), so ranks 1..N-1 sit in the
+        # Stage-1 broadcast that whole time and the watchdog kills them mid-run.
+        # CogVideoX and Hunyuan both already raise this (CogvideoI2V/pipeline.py:396).
+        import datetime
+        dist.init_process_group(backend="nccl",
+                                timeout=datetime.timedelta(minutes=60))
     from utils.distributed import DistributedManager
     dm = DistributedManager("allgather", enable_cache=enable_cache)
     logger.info(f"[rank={dm.rank}/{dm.world_size}] tile parallelism enabled")
