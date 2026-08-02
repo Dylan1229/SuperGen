@@ -544,6 +544,11 @@ class WanTiledStage2:
 
             # Every rank ends the step holding the identical full-canvas prediction.
             noise_pred = dm.allgather_fused_noise()
+            if dm.is_first_rank and (step_idx % 5 == 0
+                                     or step_idx == len(timesteps) - 1):
+                # The tile loop has no tqdm, and Wan's own bar belongs to Stage 1, so
+                # without this a 20-minute Stage 2 is indistinguishable from a hang.
+                logger.info(f"Stage 2 step {step_idx + 1}/{len(timesteps)}")
             npred = noise_pred.squeeze(0).permute(1, 0, 2, 3).unsqueeze(0)
             cur = dm.get_latents().squeeze(0).permute(1, 0, 2, 3).unsqueeze(0)
             stepped = sample_scheduler.step(npred, t, cur, return_dict=False,
