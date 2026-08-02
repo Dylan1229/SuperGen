@@ -14,11 +14,43 @@ class DistributedManager:
         self,
         comm_method: str = "allgather",
         enable_cache: bool = False,
+        sp_size: int = 1,
     ):
+        """
+        Args:
+            sp_size: sequence-parallel degree. With SP the tile axis must be partitioned over
+                GROUPS of ranks, not over ranks: every rank in an SP group works on the SAME tile
+                and shards its sequence. Using the global world size instead would hand each rank
+                in a group a different tile, so each tile would be computed on a fraction of its
+                sequence -- silently wrong output, not an error.
+
+                sp_size=1 (the default) is the existing behaviour: one rank per tile.
+        """
         if not dist.is_initialized():
             raise NotImplementedError("Should be initialized as distributed!")
         self.rank = dist.get_rank()
-        self.world_size = dist.get_world_size()
+        self.global_world_size = dist.get_world_size()
+        self.sp_size = max(1, sp_size)
+        if self.global_world_size % self.sp_size != 0:
+            raise ValueError(f"world_size {self.global_world_size} is not divisible by "
+                             f"sp_size {self.sp_size}")
+        # The tile axis sees one "worker" per SP group.
+        self.world_size = self.global_world_size // self.sp_size
+        # Which tile group this rank belongs to, and whether it leads that group. Only the leader
+        # participates in the tile-level allgather; the others contribute through SP's own
+        # collectives inside the model.
+        self.sp_group_index = self.rank // self.sp_size
+        self.sp_rank = self.rank % self.sp_size
+        self.is_sp_leader = (self.sp_rank == 0)
+        if self.sp_size > 1:
+            print(f"DistributedManager: {self.global_world_size} ranks = "
+                  f"{self.world_size} tile groups x SP {self.sp_size}; "
+                  f"this rank is group {self.sp_group_index} member {self.sp_rank}")
+
+        # Index on the TILE axis. Everything that partitions tiles or indexes a per-worker buffer
+        # must use this rather than the process rank: with SP, ranks 0..sp_size-1 are one worker.
+        # Identical to self.rank when sp_size == 1, so the existing path is untouched.
+        self.tile_rank = self.sp_group_index
 
         self.comm_method = comm_method
         print(f"Communication method: {self.comm_method}")
@@ -235,7 +267,7 @@ class DistributedManager:
     
     def get_local_buffer(self, name, rank = None):
         if rank is None:
-            rank = self.rank
+            rank = self.tile_rank
         tensor_idx = self.buffer_index_dict[name]
         start, end, shape = self._get_tensor_metadata(tensor_idx)
         return self.buffer_list[rank][start:end].view(shape)
@@ -305,7 +337,7 @@ class DistributedManager:
         ]
             
     def _get_local_all_buffer(self):
-        return self.buffer_list[self.rank]
+        return self.buffer_list[self.tile_rank]
     
     def _get_global_all_buffer_as_list(self):
         return self.buffer_list
@@ -313,7 +345,7 @@ class DistributedManager:
     def _get_local_buf_by_idx_range(self, start_idx, end_idx):
         start = self.starts[start_idx]
         end = self.ends[end_idx]
-        return self.buffer_list[self.rank][start:end]
+        return self.buffer_list[self.tile_rank][start:end]
     
     def _get_global_buf_by_idx_range(self, start_idx, end_idx):
         start = self.starts[start_idx]
@@ -345,7 +377,7 @@ class DistributedManager:
                 continue
             start, end, shape = self._get_tensor_metadata(tensor_idx)
             for cur_rank, tile_list in enumerate(self.global_indices):
-                if cur_rank == self.rank:
+                if cur_rank == self.tile_rank:
                     # No need to copy local tiles
                     continue
                 tile_buffer = self.buffer_list[cur_rank][start:end].view(shape)
@@ -520,7 +552,7 @@ class DistributedManager:
         self.avg_workload = avg_workload
 
         self.global_indices = indices
-        self.local_indices: List = self.global_indices[self.rank]
+        self.local_indices: List = self.global_indices[self.tile_rank]
         self.num_local_windows = len(self.local_indices)
         if self.num_local_windows == 0:
             print(f"WARNING, the total number of tiles is less than available devices. rank {self.rank} is idle.")
@@ -589,7 +621,7 @@ class DistributedManager:
 
         self.skipped_idx_list = skipped_indices
         self.global_indices = global_indices
-        self.local_indices: List = self.global_indices[self.rank]
+        self.local_indices: List = self.global_indices[self.tile_rank]
         self.num_local_windows = len(self.local_indices)
         if self.num_local_windows == 0:
             print(f"WARNING, the total number of tiles is less than available devices. rank {self.rank} is idle.")

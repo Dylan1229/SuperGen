@@ -96,7 +96,7 @@ def broadcast_upscaled(upscaled, dist_manager, cfg, a, device_id):
     return upscaled
 
 
-def setup_distributed(device_id, enable_cache):
+def setup_distributed(device_id, enable_cache, sp_size=1):
     """Join the process group if launched under torchrun; else stay single-process.
 
     Returns a `DistributedManager` or None. None means the single-GPU path, which
@@ -117,7 +117,7 @@ def setup_distributed(device_id, enable_cache):
         dist.init_process_group(backend="nccl",
                                 timeout=datetime.timedelta(minutes=60))
     from utils.distributed import DistributedManager
-    dm = DistributedManager("allgather", enable_cache=enable_cache)
+    dm = DistributedManager("allgather", enable_cache=enable_cache, sp_size=sp_size)
     logger.info(f"[rank={dm.rank}/{dm.world_size}] tile parallelism enabled")
     return dm
 

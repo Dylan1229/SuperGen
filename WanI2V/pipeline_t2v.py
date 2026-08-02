@@ -48,7 +48,42 @@ from pipeline import (broadcast_stage1, broadcast_upscaled,  # noqa: E402
                       rank0_only_stage1)
 
 
-def setup_distributed(device_id, enable_cache):
+def setup_sequence_parallel(ulysses_size, ring_size, cfg):
+    """Initialise xfuser's SP groups, if requested. Returns whether SP is active.
+
+    This composes with tile parallelism rather than replacing it: tiles partition the canvas and
+    need no communication inside attention, while SP shards each tile's sequence and does. The two
+    axes are orthogonal, which is the claim the parallelism table is meant to support.
+
+    Ulysses shards the head dimension, so the degree must divide num_heads. Wan T2V-14B has 40, so
+    2/4/5/8 are valid and 3/6/7 are not -- an invalid degree is rejected here because the failure
+    downstream is a silently wrong tensor shape rather than an error.
+    """
+    if ulysses_size <= 1 and ring_size <= 1:
+        return False
+    import torch.distributed as dist
+    if not dist.is_initialized():
+        raise SystemExit("sequence parallelism needs torchrun (no process group)")
+    world = dist.get_world_size()
+    if ulysses_size * ring_size != world:
+        raise SystemExit(f"ulysses_size({ulysses_size}) * ring_size({ring_size}) != "
+                         f"world_size({world})")
+    heads = getattr(cfg, "num_heads", None)
+    if heads and ulysses_size > 1 and heads % ulysses_size != 0:
+        raise SystemExit(f"ulysses_size {ulysses_size} does not divide num_heads {heads}; "
+                         f"valid degrees are {[d for d in range(2, heads + 1) if heads % d == 0]}")
+    from xfuser.core.distributed import (init_distributed_environment,
+                                         initialize_model_parallel)
+    init_distributed_environment(rank=dist.get_rank(), world_size=world)
+    initialize_model_parallel(sequence_parallel_degree=world,
+                              ring_degree=ring_size,
+                              ulysses_degree=ulysses_size)
+    logger.info(f"sequence parallelism: ulysses={ulysses_size} ring={ring_size} "
+                f"over world={world}, num_heads={heads}")
+    return True
+
+
+def setup_distributed(device_id, enable_cache, sp_size=1):
     """Join the process group if launched under torchrun; else stay single-process.
 
     Returns a `DistributedManager` or None. None means the single-GPU path, which
@@ -69,7 +104,7 @@ def setup_distributed(device_id, enable_cache):
         dist.init_process_group(backend="nccl",
                                 timeout=datetime.timedelta(minutes=60))
     from utils.distributed import DistributedManager
-    dm = DistributedManager("allgather", enable_cache=enable_cache)
+    dm = DistributedManager("allgather", enable_cache=enable_cache, sp_size=sp_size)
     logger.info(f"[rank={dm.rank}/{dm.world_size}] tile parallelism enabled")
     return dm
 
@@ -101,6 +136,17 @@ def main():
     ap.add_argument("--offload_model", action="store_true", default=True)
     ap.add_argument("--no_offload_model", dest="offload_model", action="store_false")
     ap.add_argument("--stage1_latents_path", default=None)
+    # Sequence parallelism, for the parallelism-scaling comparison. Wan supports it natively:
+    # `WanT2V(use_usp=True)` swaps in xfuser's usp_attn_forward / usp_dit_forward
+    # (wan/text2video.py:91-101), so this is the model's own SP rather than something we bolt on.
+    #
+    # Ulysses shards the HEAD dimension, so the degree must divide num_heads. Wan T2V-14B has 40
+    # (wan/configs/wan_t2v_14B.py:24), giving valid degrees 2, 4, 5, 8. A degree that does not
+    # divide it is rejected below rather than producing a quietly wrong result.
+    ap.add_argument("--ulysses_size", type=int, default=1,
+                    help="Ulysses SP degree; must divide num_heads (40 for T2V-14B)")
+    ap.add_argument("--ring_size", type=int, default=1,
+                    help="Ring-attention degree; ulysses_size * ring_size must equal world size")
     a = ap.parse_args()
 
     import wan
@@ -113,15 +159,23 @@ def main():
     cfg = WAN_CONFIGS[a.task]
     device_id = int(os.environ.get("LOCAL_RANK", 0))
     dev = torch.device(f"cuda:{device_id}")
-    dist_manager = setup_distributed(device_id, a.enable_cache)
+    # SP groups first: the manager needs the degree to partition tiles over GROUPS rather than
+    # over ranks.
+    use_usp = setup_sequence_parallel(a.ulysses_size, a.ring_size, cfg)
+    sp_size = a.ulysses_size * a.ring_size if use_usp else 1
+    dist_manager = setup_distributed(device_id, a.enable_cache, sp_size=sp_size)
 
     s1_h, s1_w = a.height // a.upscale_factor, a.width // a.upscale_factor
     logger.info(f"Stage 1 at {s1_h}x{s1_w}; Stage 2 target {a.height}x{a.width} "
                 f"(upscale_factor={a.upscale_factor}, task={a.task})")
 
     logger.info(f"loading {a.task} ...")
+    # rank must be the REAL rank when SP is on: Wan uses it to decide which rank holds the T5 and
+    # which returns the video, and hard-coding 0 makes every rank think it is the writer.
+    import torch.distributed as _dist
+    _rank = _dist.get_rank() if _dist.is_initialized() else 0
     pipe = wan.WanT2V(config=cfg, checkpoint_dir=a.ckpt_dir, device_id=device_id,
-                      rank=0, t5_cpu=False)
+                      rank=_rank, t5_cpu=False, use_usp=use_usp)
 
     # ---------------------------------------------------------------- Stage 1
     if a.upscale_factor == 1:
