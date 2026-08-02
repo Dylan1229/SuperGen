@@ -42,6 +42,51 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 
+def setup_distributed(device_id, enable_cache):
+    """Join the process group if launched under torchrun; else stay single-process.
+
+    Returns a `DistributedManager` or None. None means the single-GPU path, which
+    stays supported because the serial timings in the paper's tables must not carry
+    collective overhead, and because a 720p single-stage run has one tile.
+    """
+    import torch.distributed as dist
+    if "RANK" not in os.environ:
+        logger.info("not under torchrun: single-GPU path")
+        return None
+    torch.cuda.set_device(device_id)
+    if not dist.is_initialized():
+        dist.init_process_group(backend="nccl")
+    from utils.distributed import DistributedManager
+    dm = DistributedManager("allgather", enable_cache=enable_cache)
+    logger.info(f"[rank={dm.rank}/{dm.world_size}] tile parallelism enabled")
+    return dm
+
+
+def broadcast_stage1(s1_latent, dist_manager, cfg, a, device_id):
+    """Give every rank rank-0's Stage-1 latent.
+
+    Non-rank-0 arrives with None, so the shape is computed rather than
+    communicated -- it is fully determined by the Stage-1 resolution.
+    """
+    if dist_manager is None:
+        return s1_latent
+    import torch.distributed as dist
+    s1_h, s1_w = a.height // a.upscale_factor, a.width // a.upscale_factor
+    lat_f = (a.num_frames - 1) // cfg.vae_stride[0] + 1
+    shape = (16, lat_f, s1_h // cfg.vae_stride[1], s1_w // cfg.vae_stride[2])
+    dev = torch.device(f"cuda:{device_id}")
+    if s1_latent is None:
+        s1_latent = torch.zeros(shape, device=dev, dtype=torch.float32)
+    else:
+        s1_latent = s1_latent.to(dev, torch.float32).contiguous()
+        assert tuple(s1_latent.shape) == shape, (
+            f"Stage-1 latent {tuple(s1_latent.shape)} != expected {shape}; the "
+            f"broadcast shape is derived, so a mismatch would silently corrupt "
+            f"the non-zero ranks")
+    dist.broadcast(s1_latent, src=dist_manager.first_rank)
+    return s1_latent
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -87,6 +132,7 @@ def main():
     t_start = time.time()
     cfg = WAN_CONFIGS[a.task]
     device_id = int(os.environ.get("LOCAL_RANK", 0))
+    dist_manager = setup_distributed(device_id, a.enable_cache)
 
     # Stage-1 resolution: the base model's native scale.
     s1_h, s1_w = a.height // a.upscale_factor, a.width // a.upscale_factor
@@ -116,7 +162,8 @@ def main():
         return
 
     stage2 = WanTiledStage2(pipe, rope_mode=a.rope_mode, loop_step=a.loop_step,
-                            device=f"cuda:{device_id}")
+                            device=f"cuda:{device_id}",
+                            dist_manager=dist_manager)
 
     s1_latent = None
     if a.stage1_latents_path and os.path.isfile(a.stage1_latents_path):
@@ -126,22 +173,32 @@ def main():
                     f"{tuple(s1_latent.shape)}")
 
     if s1_latent is None:
-        logger.info("Stage 1: generating the low-resolution guide")
-        s1_video = pipe.generate(
-            a.prompt, img, max_area=s1_h * s1_w, frame_num=a.num_frames,
-            shift=a.shift, sampling_steps=a.num_inference_steps,
-            guide_scale=a.guidance_scale, seed=a.seed, offload_model=a.offload_model,
-            n_prompt=a.negative_prompt or "",
-        )
-        s1_latent = pipe.vae.encode([s1_video])[0]
-        if a.stage1_latents_path:
-            os.makedirs(os.path.dirname(a.stage1_latents_path) or ".", exist_ok=True)
-            torch.save(s1_latent, a.stage1_latents_path)
-        out_dir = os.path.dirname(a.output_path) or "."
-        os.makedirs(out_dir, exist_ok=True)
-        cache_video(tensor=s1_video[None],
-                    save_file=os.path.join(out_dir, "stage1_lowres_video.mp4"),
-                    fps=a.fps, normalize=True, value_range=(-1, 1))
+        # Stage 1 is the untouched base model at 720p and is identical on every
+        # rank, so running it everywhere would waste world_size-1 GPUs and, worse,
+        # risk the ranks diverging (offload_model reorders CUDA work). Run it on
+        # rank 0 and broadcast, exactly as CogVideoX does
+        # (pipeline_cogvideox_i2v_TVG.py:1338).
+        is_rank0 = dist_manager is None or dist_manager.is_first_rank
+        if is_rank0:
+            logger.info("Stage 1: generating the low-resolution guide")
+            s1_video = pipe.generate(
+                a.prompt, img, max_area=s1_h * s1_w, frame_num=a.num_frames,
+                shift=a.shift, sampling_steps=a.num_inference_steps,
+                guide_scale=a.guidance_scale, seed=a.seed, offload_model=a.offload_model,
+                n_prompt=a.negative_prompt or "",
+            )
+            s1_latent = pipe.vae.encode([s1_video])[0]
+            if a.stage1_latents_path:
+                os.makedirs(os.path.dirname(a.stage1_latents_path) or ".", exist_ok=True)
+                torch.save(s1_latent, a.stage1_latents_path)
+            out_dir = os.path.dirname(a.output_path) or "."
+            os.makedirs(out_dir, exist_ok=True)
+            cache_video(tensor=s1_video[None],
+                        save_file=os.path.join(out_dir, "stage1_lowres_video.mp4"),
+                        fps=a.fps, normalize=True, value_range=(-1, 1))
+            del s1_video
+            torch.cuda.empty_cache()
+        s1_latent = broadcast_stage1(s1_latent, dist_manager, cfg, a, device_id)
 
     # ---------------------------------------------------------------- Stage 2
     t_up = time.time()
@@ -238,11 +295,18 @@ def main():
     if a.offload_model:
         pipe.model.cpu()
         torch.cuda.empty_cache()
-    video = pipe.vae.decode([final])[0]
-    cache_video(tensor=video[None], save_file=a.output_path, fps=a.fps,
-                normalize=True, value_range=(-1, 1))
-    logger.info(f"Saved final video to: {a.output_path}")
+    # One decode, on one rank: every rank holds the same canvas after the final
+    # allgather, so decoding on all of them would just duplicate a multi-GB op.
+    if dist_manager is None or dist_manager.is_first_rank:
+        video = pipe.vae.decode([final])[0]
+        cache_video(tensor=video[None], save_file=a.output_path, fps=a.fps,
+                    normalize=True, value_range=(-1, 1))
+        logger.info(f"Saved final video to: {a.output_path}")
     logger.info(f"Total running time is {time.time() - t_start:.2f} seconds")
+    if dist_manager is not None:
+        import torch.distributed as dist
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":

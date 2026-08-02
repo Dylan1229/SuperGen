@@ -67,8 +67,13 @@ class WanTiledStage2:
     """
 
     def __init__(self, wan_i2v, rope_mode: str = "local",
-                 loop_step: int = 16, device: str = "cuda"):
+                 loop_step: int = 16, device: str = "cuda",
+                 dist_manager=None):
         self.wan = wan_i2v
+        # Tile parallelism. `None` keeps the single-process path (world_size 1 is
+        # also fine, but skipping the manager avoids requiring a process group at
+        # all for quick single-GPU checks).
+        self.dm = dist_manager
         self.cfg = wan_i2v.config
         self.rope_mode = rope_mode
         self.loop_step = loop_step
@@ -177,7 +182,7 @@ class WanTiledStage2:
         wp = wcfg.get_window_params()
         win_h, win_w = wp["window_size"]
         num_tiles = wp["total_windows"]
-        step_h, step_w = wp["step_size_h"], wp["step_size_w"]
+        step_h, step_w = wp["latent_step_size_h"], wp["latent_step_size_w"]
         logger.info(f"Wan Stage-2: canvas {H}x{W}, {num_tiles} tiles of {win_h}x{win_w}, "
                     f"step=({step_h},{step_w})")
 
@@ -192,6 +197,33 @@ class WanTiledStage2:
         if enable_cache and self.cache is None:
             self.setup_cache(canvas.torch_latent.shape, num_tiles,
                              len(timesteps), thresh=0.09, dtype=latent.dtype)
+
+        # ------------------------------------------------------- tile parallelism
+        # 4K is 9 tiles and 2K is 4, so one rank per tile is the natural split and
+        # it is what makes the runtime comparison against FreeSwim/CineScale
+        # meaningful -- their single global sequence has no equivalent axis to shard
+        # except sequence parallelism. The manager owns the canvas from here on:
+        # `get_tile`/`update_tile` are shift-aware and `allgather_fused_noise`
+        # rebuilds the whole canvas from every rank's tiles each step.
+        if self.dm is not None:
+            # y is the I2V conditioning; setup_config's second slot is exactly the
+            # "conditioning latent sliced with the same window" role, so T2V (no y)
+            # passes a zero tensor of the same shape rather than a special case.
+            img_lat = (y_tiler.torch_latent if y_tiler is not None
+                       else torch.zeros_like(canvas.torch_latent))
+            self.dm.setup_config(
+                canvas.torch_latent, img_lat, wcfg,
+                noise_fusion_method="weighted_average",
+                std_tracker_update_interval=5,
+                # Wan issues cond and uncond as two separate forward calls and
+                # combines them here, so the manager only ever sees a single fused
+                # prediction per tile -- not a batched CFG pair.
+                do_classifier_free_guidance=False,
+            )
+            return self._denoise_distributed(
+                timesteps, sample_scheduler, arg_c, arg_null, guide_scale,
+                shift_timesteps, seed_g, enable_cache, y_tiler is not None,
+                win_h, win_w, step_h, step_w, autocast_dtype=self._param_dtype)
 
         shift_h = shift_w = 0
         autocast_ctx = torch.amp.autocast("cuda", dtype=self._param_dtype)
@@ -270,3 +302,82 @@ class WanTiledStage2:
 
         # back to Wan's [C, F, H, W]
         return canvas.torch_latent.squeeze(0).permute(1, 0, 2, 3).contiguous()
+
+    # ------------------------------------------------- distributed denoise loop
+    def _denoise_distributed(
+        self, timesteps, sample_scheduler, arg_c, arg_null, guide_scale,
+        shift_timesteps, seed_g, enable_cache, has_y,
+        win_h, win_w, step_h, step_w, autocast_dtype,
+    ):
+        """The same loop as `denoise`, with the tiles split across ranks.
+
+        Mirrors the structure CogVideoX and Hunyuan already use
+        (`pipeline_cogvideox_i2v_TVG.py:655-811`): per step, clear the fuser,
+        communicate the shifted canvas, run only this rank's tiles, then allgather
+        the fused prediction so every rank steps the scheduler on an identical
+        canvas. Keeping the scheduler replicated rather than sharded is what makes
+        the multi-GPU output bit-comparable to the single-GPU one.
+        """
+        import torch.distributed as dist
+        dm = self.dm
+        autocast_ctx = torch.amp.autocast("cuda", dtype=autocast_dtype)
+        logger.info(f"[rank={dm.rank}] Wan Stage-2 tile parallelism: "
+                    f"{dm.num_total_windows} tiles over {dm.world_size} ranks, "
+                    f"local={dm.get_local_indices()}")
+
+        for step_idx, t in enumerate(timesteps):
+            dm.clear()
+            if shift_timesteps is not None and step_idx in shift_timesteps:
+                # The canvas has to be materialised on every rank before it is
+                # re-cut, because a shift moves tile boundaries across the previous
+                # owner's slice.
+                dm.communicate("latent")
+                dm.shift()
+
+            for tile_idx in dm.get_local_indices():
+                tile, y_tile = dm.get_tile(tile_idx)
+                top, _, left, _ = dm.get_tile_boundary_for_idx(tile_idx)
+                window = dm.get_tile_boundary_for_idx(tile_idx)
+
+                if self._rope is not None:
+                    self._rope.set_tile(0, top // self.patch_size[1],
+                                        left // self.patch_size[2])
+
+                reuse = False
+                if enable_cache and self.cache is not None:
+                    reuse = self.cache.should_skip(step_idx, tile_idx, tile, window)
+
+                if reuse:
+                    out = self.cache.reuse(tile, window)
+                else:
+                    model_in = [tile.squeeze(0).permute(1, 0, 2, 3).contiguous()]
+                    ts = torch.stack([t]).to(self.device)
+                    kw_c, kw_null = dict(arg_c), dict(arg_null)
+                    if has_y:
+                        yt = y_tile.squeeze(0).permute(1, 0, 2, 3).contiguous()
+                        kw_c["y"] = [yt]
+                        kw_null["y"] = [yt]
+                    with autocast_ctx, torch.no_grad():
+                        pred_c = self.wan.model(model_in, t=ts, **kw_c)[0]
+                        pred_u = self.wan.model(model_in, t=ts, **kw_null)[0]
+                    pred = pred_u + guide_scale * (pred_c - pred_u)
+                    out = pred.permute(1, 0, 2, 3).unsqueeze(0).to(
+                        dm.get_latents().dtype)
+                    if enable_cache and self.cache is not None:
+                        self.cache.record(step_idx, tile_idx, tile, out, window)
+
+                dm.tile_noise_fuser_add(tile_idx, out, tile_weight=1.0)
+
+            # Every rank ends the step holding the identical full-canvas prediction.
+            noise_pred = dm.allgather_fused_noise()
+            npred = noise_pred.squeeze(0).permute(1, 0, 2, 3).unsqueeze(0)
+            cur = dm.get_latents().squeeze(0).permute(1, 0, 2, 3).unsqueeze(0)
+            stepped = sample_scheduler.step(npred, t, cur, return_dict=False,
+                                           generator=seed_g)[0]
+            dm.set_latents(stepped.squeeze(0).permute(1, 0, 2, 3)
+                                  .unsqueeze(0).contiguous())
+
+        if enable_cache and self.cache is not None:
+            self.cache.report()
+        return dm.get_latents().squeeze(0).permute(1, 0, 2, 3).contiguous()
+
