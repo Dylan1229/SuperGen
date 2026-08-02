@@ -248,9 +248,15 @@ class DistributedManager:
 
 
     def shift(self):
-        # TODO(MX): can be changed to interleaved shifting
-        self.current_shift_step_h = (self.current_shift_step_h + 1) % self.loop_step
-        self.current_shift_step_w = (self.current_shift_step_w + 1) % self.loop_step
+        # The counter must wrap on each axis's OWN cycle length, not on a shared
+        # loop_step. With window 90x160 the closing cycles are 90/5=18 and
+        # 160/10=16, so a single `% loop_step` would restart the height axis after
+        # 16 of its 18 positions and leave a band the boundary never visits.
+        # step_size == 0 means one window on that axis, so nothing to shift.
+        cycle_h = (self.window_height // self.latent_step_size_h) if self.latent_step_size_h else 1
+        cycle_w = (self.window_width // self.latent_step_size_w) if self.latent_step_size_w else 1
+        self.current_shift_step_h = (self.current_shift_step_h + 1) % max(cycle_h, 1)
+        self.current_shift_step_w = (self.current_shift_step_w + 1) % max(cycle_w, 1)
     
 
     def allocate_buffer(self, tile_noise_fuser: TileNoiseAggregator2D = None):

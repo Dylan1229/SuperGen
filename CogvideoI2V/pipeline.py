@@ -205,7 +205,21 @@ def generate_video(
     pipe.scheduler = CustomCogVideoXDDIMScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
     pipe.to("cuda")
     pipe.vae.enable_slicing()
-    pipe.vae.enable_tiling()
+    # VAE tiling produces its own seam lattice, independent of the Stage-2 tile
+    # grid. diffusers' CogVideoX defaults are `tile_overlap_factor=(1/6, 1/5)` on a
+    # 240x360 sample tile -> only (5, 9) latent of overlap, and the source comments
+    # say those were "chosen based on experimentation" at 720x480. Applied at 4K
+    # that leaves decode boundaries every 200 px / 288 px.
+    #
+    # Widening the overlap to 1/3 pushes them to 160 px / 240 px with a longer
+    # blend ramp (diffusers blends linearly across the overlap), at no extra
+    # denoising cost -- decode is a single pass either way.
+    _vae_overlap = float(os.environ.get("VAE_TILE_OVERLAP", "0.333"))
+    pipe.vae.enable_tiling(
+        tile_overlap_factor_height=_vae_overlap,
+        tile_overlap_factor_width=_vae_overlap,
+    )
+    logging.info(f"VAE tiling overlap factor = {_vae_overlap}")
 
     # Set up generator for reproducibility
     generator = torch.Generator(device="cuda")

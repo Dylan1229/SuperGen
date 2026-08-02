@@ -401,7 +401,22 @@ class SlidingWindowConfig:
         """
         if num_windows == 1:
             return 0
-        return window_dim // loop_step
+        step = window_dim // loop_step
+        if step < 1:
+            return 1
+        # The shift cycle must close: after `loop_step` shifts the grid has to be
+        # back where it started, i.e. step * loop_step == window_dim. Plain floor
+        # division does not guarantee that -- at window_dim=90, loop_step=16 gives
+        # step=5 and 5*16=80, leaving a 10-unit band the boundary never lands in.
+        # (Width happens to be fine: 160//16=10 and 10*16=160.)
+        #
+        # Snap to the nearest divisor of window_dim so the cycle closes on every
+        # axis independently. No single loop_step closes both 90 and 160, which is
+        # why this is per-axis rather than a different global loop_step.
+        if step * loop_step != window_dim:
+            divisors = [d for d in range(1, window_dim + 1) if window_dim % d == 0]
+            step = min(divisors, key=lambda d: (abs(d - step), d))
+        return step
     
     def get_window_params(self) -> Dict[str, Any]:
         """

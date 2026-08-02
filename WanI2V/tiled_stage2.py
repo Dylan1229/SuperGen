@@ -197,8 +197,14 @@ class WanTiledStage2:
         autocast_ctx = torch.amp.autocast("cuda", dtype=self._param_dtype)
         for step_idx, t in enumerate(timesteps):
             if shift_timesteps is not None and step_idx in shift_timesteps:
-                shift_h = (shift_h + 1) % max(self.loop_step, 1)
-                shift_w = (shift_w + 1) % max(self.loop_step, 1)
+                # Wrap on each axis's own closing cycle (window/step), not on a
+                # shared loop_step: with window 90x160 those are 18 and 16, so a
+                # single modulus would leave a band on the height axis that the
+                # tile boundary never visits. Matches DistributedManager.shift().
+                cyc_h = (win_h // step_h) if step_h else 1
+                cyc_w = (win_w // step_w) if step_w else 1
+                shift_h = (shift_h + 1) % max(cyc_h, 1)
+                shift_w = (shift_w + 1) % max(cyc_w, 1)
 
             fused = torch.zeros_like(canvas.torch_latent)
             counts = torch.zeros_like(canvas.torch_latent)
