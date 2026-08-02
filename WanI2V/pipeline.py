@@ -270,6 +270,12 @@ def main():
     # decode->bicubic->encode over the whole canvas, which at 4K is both N-times
     # wasted work and N concurrent multi-GB VAE passes on one node.
     if dist_manager is None or dist_manager.is_first_rank:
+        # Park the 14B DiT on the CPU first. It is ~67 GB resident after Stage 1, and
+        # the tiled VAE still needs several GB of its own; without this, decode dies
+        # asking for its last 2 GB. `denoise` moves it back before the tile loop.
+        if a.offload_model:
+            pipe.model.cpu()
+            torch.cuda.empty_cache()
         upscaled = stage2.upscale_pixel(s1_latent, a.height, a.width)
     else:
         upscaled = None
