@@ -50,8 +50,18 @@ def _slice_axis(table: torch.Tensor, offset: int, size: int, extent: Optional[in
         pos = pos.clamp_(max=table.shape[0] - 1)
         return table[pos]
 
+    if mode == "ntk":
+        # The table handed in has already been rebuilt with the NTK-scaled theta, so
+        # positions are indexed natively from here -- same as 'extend'.
+        pos = torch.arange(offset, offset + size, device=table.device)
+        if extent is not None:
+            pos = pos % extent
+        pos = pos.clamp_(max=table.shape[0] - 1)
+        return table[pos]
+
     if mode != "interp":
-        raise ValueError(f"unknown rope mode {mode!r}")
+        raise ValueError(
+            f"unknown rope mode {mode!r}; use 'extend', 'ntk' or 'interp'")
     if trained is None or extent is None:
         raise ValueError("mode='interp' needs both trained and extent")
 
@@ -68,6 +78,39 @@ def _slice_axis(table: torch.Tensor, offset: int, size: int, extent: Optional[in
     # result stays a pure rotation (|freq| == 1), which the complex multiply needs.
     blended = table[lo] * (1.0 - frac) + table[hi] * frac
     return blended / blended.abs().clamp_min(1e-12)
+
+
+def _ntk_alpha(canvas: int, trained: int) -> float:
+    """NTK factor that lets `canvas` positions fit the span `trained` covered.
+
+    Same heuristic as the CogVideoX path (`CogvideoI2V/modules/global_rope.py:73`):
+    alpha = (canvas/trained)**2, clamped to [1, 64]. CineScale hard-codes 20 for a ~3x
+    canvas, where this gives 9 -- i.e. we are the more conservative of the two.
+    """
+    if trained <= 0 or canvas <= trained:
+        return 1.0
+    return float(min(64.0, max(1.0, (canvas / trained) ** 2)))
+
+
+def _ntk_table(table: torch.Tensor, alpha: float, theta: float = 10000.0) -> torch.Tensor:
+    """Rebuild a `rope_params` table with theta scaled by `alpha`.
+
+    NTK scaling acts on the frequency basis, not on the positions, so unlike 'interp'
+    it cannot be expressed as a reindex of the existing table -- the table has to be
+    recomputed. Mirrors `wan.modules.model.rope_params` exactly (outer product of
+    positions with theta**(-2k/dim), then `torch.polar`) so the only difference from
+    upstream is theta.
+    """
+    if alpha == 1.0:
+        return table
+    max_seq_len, half = table.shape
+    dim = half * 2
+    freqs = torch.outer(
+        torch.arange(max_seq_len, device=table.device),
+        1.0 / torch.pow(theta * alpha,
+                        torch.arange(0, dim, 2, device=table.device)
+                        .to(torch.float64).div(dim)))
+    return torch.polar(torch.ones_like(freqs), freqs)
 
 
 @torch.amp.autocast("cuda", enabled=False)
@@ -90,7 +133,7 @@ def rope_apply_at_offset(
             which reproduces upstream exactly.
         canvas: (F, H, W) canvas extent in patches, for wrapping shifted windows.
         trained: (F, H, W) extent the model was trained at; needed for mode='interp'.
-        mode: 'extend' or 'interp'.
+        mode: 'extend', 'ntk' or 'interp'.
     """
     n, c = x.size(2), x.size(3) // 2
     # Same split as upstream: temporal gets the remainder, h and w get c//3 each.
@@ -103,9 +146,18 @@ def rope_apply_at_offset(
         cf, ch, cw = (None, None, None) if canvas is None else canvas
         tf, th, tw = (None, None, None) if trained is None else trained
 
-        fr_f = _slice_axis(parts[0], off_f, f, cf, mode, tf)
-        fr_h = _slice_axis(parts[1], off_h, h, ch, mode, th)
-        fr_w = _slice_axis(parts[2], off_w, w, cw, mode, tw)
+        tab_f, tab_h, tab_w = parts[0], parts[1], parts[2]
+        if mode == "ntk":
+            # Spatial axes only. The temporal extent is unchanged by upscaling, so
+            # stretching its basis would distort motion for no reason.
+            if ch and th:
+                tab_h = _ntk_table(tab_h, _ntk_alpha(ch, th))
+            if cw and tw:
+                tab_w = _ntk_table(tab_w, _ntk_alpha(cw, tw))
+
+        fr_f = _slice_axis(tab_f, off_f, f, cf, mode, tf)
+        fr_h = _slice_axis(tab_h, off_h, h, ch, mode, th)
+        fr_w = _slice_axis(tab_w, off_w, w, cw, mode, tw)
 
         x_i = torch.view_as_complex(
             x[i, :seq_len].to(torch.float64).reshape(seq_len, n, -1, 2))

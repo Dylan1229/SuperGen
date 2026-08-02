@@ -144,5 +144,49 @@ def main():
     print("PASS: Wan canvas-absolute RoPE generalises upstream and stays unitary")
 
 
+def test_ntk():
+    """NTK mode must scale the frequency basis without breaking RoPE's invariants.
+
+    NTK acts on theta, not on positions, so it cannot be a reindex of the existing
+    table -- the table is recomputed. Three things must hold, and each has a silent
+    failure mode:
+
+      * unit modulus: RoPE is applied as a complex multiply, so a table that is not a
+        pure rotation rescales the activations instead of rotating them.
+      * alpha == 1 is the identity: otherwise 720p, where canvas == trained, would
+        quietly stop matching the base model.
+      * canvas == trained reproduces upstream exactly: the guard that the new mode is
+        a generalisation rather than a different algorithm.
+    """
+    import torch
+    from global_rope_wan import _ntk_alpha, _ntk_table, rope_apply_at_offset
+    from wan.modules.model import rope_params, rope_apply
+
+    # 4K: latent 270x480 -> patch grid 135x240 against a trained 45x80.
+    assert _ntk_alpha(135, 45) == 9.0, _ntk_alpha(135, 45)
+    assert _ntk_alpha(240, 80) == 9.0
+    assert _ntk_alpha(45, 45) == 1.0, "no scaling when the canvas is the trained size"
+
+    table = rope_params(1024, 128)
+    scaled = _ntk_table(table, _ntk_alpha(135, 45))
+    assert torch.allclose(scaled.abs(), torch.ones_like(scaled.abs()), atol=1e-6), \
+        "NTK table is not a pure rotation"
+    assert (scaled - table).abs().max() > 1e-3, "NTK table is indistinguishable from base"
+    assert torch.equal(_ntk_table(table, 1.0), table), "alpha=1 must be the identity"
+
+    x = torch.randn(1, 11 * 45 * 80, 8, 128)
+    gs = torch.tensor([[11, 45, 80]])
+    ref = rope_apply(x.clone(), gs, table)
+    got = rope_apply_at_offset(x.clone(), gs, table, offsets=[(0, 0, 0)],
+                               canvas=(11, 45, 80), trained=(11, 45, 80), mode="ntk")
+    err = (ref - got).abs().max().item()
+    assert err == 0.0, f"ntk at canvas==trained must match upstream exactly, got {err}"
+    print("PASS: Wan NTK RoPE scales theta, stays unitary, and generalises upstream")
+
+
+    test_ntk()
+
+
 if __name__ == "__main__":
     main()
+    test_ntk()
