@@ -328,14 +328,22 @@ def main():
                         msk[:, 1:]], dim=1)
     msk = msk.view(1, msk.shape[1] // 4, 4, lat_h, lat_w).transpose(1, 2)[0]
 
+    # The second whole-canvas VAE encode: Wan's I2V `y` conditioning is the input
+    # image at target resolution followed by zero frames. Same 80 GiB conv as the
+    # Stage-2 re-encode, so it takes the same tiled path, on rank 0, then broadcasts.
     import torch.nn.functional as _F
-    y_cond = pipe.vae.encode([
-        torch.concat([
+    if dist_manager is None or dist_manager.is_first_rank:
+        y_pixels = torch.concat([
             _F.interpolate(img_tensor[None].cpu(), size=(a.height, a.width),
                            mode="bicubic").transpose(0, 1),
             torch.zeros(3, a.num_frames - 1, a.height, a.width),
         ], dim=1).to(dev)
-    ])[0]
+        y_cond = stage2.encode_tiled(y_pixels)
+        del y_pixels
+        torch.cuda.empty_cache()
+    else:
+        y_cond = None
+    y_cond = broadcast_upscaled(y_cond, dist_manager, cfg, a, device_id)
     y_canvas = torch.concat([msk, y_cond])          # [C_y, F_lat, lat_h, lat_w]
     logger.info(f"I2V conditioning: y_canvas {tuple(y_canvas.shape)} "
                 f"clip_fea {tuple(clip_context[0].shape)}")
@@ -367,7 +375,8 @@ def main():
     # One decode, on one rank: every rank holds the same canvas after the final
     # allgather, so decoding on all of them would just duplicate a multi-GB op.
     if dist_manager is None or dist_manager.is_first_rank:
-        video = pipe.vae.decode([final])[0]
+        # Tiled for the same reason as the re-encode; a whole 4K decode OOMs.
+        video = stage2.decode_tiled(final)
         cache_video(tensor=video[None], save_file=a.output_path, fps=a.fps,
                     normalize=True, value_range=(-1, 1))
         logger.info(f"Saved final video to: {a.output_path}")

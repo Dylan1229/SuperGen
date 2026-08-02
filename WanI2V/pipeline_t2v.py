@@ -230,7 +230,8 @@ def main():
         pipe.model.cpu()
         torch.cuda.empty_cache()
     if dist_manager is None or dist_manager.is_first_rank:
-        video = pipe.vae.decode([final])[0]
+        # Tiled for the same reason as the re-encode; a whole 4K decode OOMs.
+        video = stage2.decode_tiled(final)
         cache_video(tensor=video[None], save_file=a.output_path, fps=a.fps,
                     normalize=True, value_range=(-1, 1))
         logger.info(f"Saved final video to: {a.output_path}")

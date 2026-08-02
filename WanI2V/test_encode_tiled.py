@@ -120,6 +120,46 @@ def main():
         sys.exit(1)
     print("PASS: tiled VAE encode matches the whole-frame encode outside the "
           "known global-attention residual")
+    check_decode(stage2, cfg)
+
+
+def check_decode(stage2, cfg):
+    """The decode side, which has the same structure and one extra requirement.
+
+    Encode feeds 35 more denoising steps, so a hard cut at tile edges is harmless
+    there. A decode is the last thing before the frame reaches a viewer, so its tiles
+    are blended with a linear ramp -- and the test therefore checks that the seam band
+    is not WORSE than the interior, which is the property the ramp buys.
+
+    Run at the 720p latent grid, the largest whole-frame decode that works; 2K already
+    fails inside vae.py:451, which is why decode had to be tiled at all.
+    """
+    g = torch.Generator().manual_seed(11)
+    lat = (torch.randn(16, 3, 90, 160, generator=g) * 0.5).to("cuda:0", torch.float32)
+    with torch.no_grad():
+        ref = stage2.decode_tiled(lat, max_latent_per_tile=90 * 160)   # untiled
+        torch.cuda.empty_cache()
+        got = stage2.decode_tiled(lat, max_latent_per_tile=45 * 80, overlap=8)  # 2x2
+    err = (ref - got).abs()
+    lv = 127.5        # pixels are [-1, 1]; report in 8-bit levels
+    print(f"\ndecode {tuple(ref.shape)}: max={err.max().item()*lv:.2f} "
+          f"mean={err.mean().item()*lv:.3f} of 255")
+    H = ref.shape[2]
+    sr = H // 2
+    seam = err[:, :, sr - 8:sr + 8, :].mean().item() * lv
+    interior = err[:, :, 20:sr - 32, :].mean().item() * lv
+    print(f"  seam band={seam:.3f} interior={interior:.3f} (8-bit levels)")
+
+    # Half a level of mean error is well under any visible threshold, and the seam
+    # must not be worse than the interior -- if it is, the ramp is not working.
+    if err.mean().item() * lv > 0.5:
+        print(f"FAIL: decode mean error {err.mean().item()*lv:.3f}/255 is too large")
+        sys.exit(1)
+    if seam > 1.5 * interior:
+        print(f"FAIL: decode error concentrates at the seam ({seam:.3f} vs "
+              f"{interior:.3f}) -- the linear blend is not working")
+        sys.exit(1)
+    print("PASS: tiled VAE decode matches the whole-frame decode, seam included")
 
 
 if __name__ == "__main__":

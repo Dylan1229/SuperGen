@@ -138,7 +138,7 @@ class WanTiledStage2:
         and OOMs on an 80 GB H100.
         """
         import torch.nn.functional as F
-        video = self.wan.vae.decode([latent])[0]        # [C, F, H, W] in [-1, 1]
+        video = self.decode_tiled(latent)               # [C, F, H, W] in [-1, 1]
         C, Fr, H, W = video.shape
         frames = video.permute(1, 0, 2, 3)              # [F, C, H, W]
         up = F.interpolate(frames.float(), size=(target_h, target_w),
@@ -187,12 +187,17 @@ class WanTiledStage2:
             return self.wan.vae.encode([pixels])[0]
 
         sh, sw = self.vae_stride[1], self.vae_stride[2]
-        # Tile in halves/thirds along each axis so tile edges land on VAE-stride
-        # multiples; a ragged last tile would misalign the latent write.
-        n_h = max(1, -(-H // 1088))
-        n_w = max(1, -(-W // 1920))
-        th = ((H // n_h) // sh) * sh
-        tw = ((W // n_w) // sw) * sw
+        # Derived from the budget, not hard-coded, so the threshold and the tile count
+        # cannot disagree. Tile edges are snapped to VAE-stride multiples; a ragged
+        # last tile would misalign the latent write.
+        n_h = n_w = 1
+        while (H // n_h) * (W // n_w) > max_pixels_per_tile:
+            if H / n_h >= W / n_w:
+                n_h += 1
+            else:
+                n_w += 1
+        th = max(sh, ((H // n_h) // sh) * sh)
+        tw = max(sw, ((W // n_w) // sw) * sw)
         logger.info(f"VAE encode tiled: {H}x{W} -> {n_h}x{n_w} tiles of {th}x{tw} "
                     f"(+{overlap}px overlap); Wan's VAE has no spatial tiling")
 
@@ -230,6 +235,85 @@ class WanTiledStage2:
                 del enc
                 torch.cuda.empty_cache()
         return out
+
+    def decode_tiled(self, latent: torch.Tensor, max_latent_per_tile: int = 90 * 160,
+                     overlap: int = 8) -> torch.Tensor:
+        """VAE-decode a large latent in overlapping spatial tiles.
+
+        The mirror of `encode_tiled`, and needed for the same reason: Wan's VAE
+        decoder has no spatial tiling, so a 2K latent already blows up inside
+        `vae.py:451` and a 4K one has no chance. The decoder's only global operator is
+        again a single `middle.1` AttentionBlock, at latent resolution.
+
+        The default budget is 90x160 latent -- the 720p grid, which is what Wan's VAE
+        is exercised at upstream and the largest we have observed decoding cleanly. A
+        2K latent (180x320) already fails inside `vae.py:451`, so 2K and 4K both tile.
+
+        `overlap` is in LATENT units (8 = 64 px at the 8x spatial stride), and the
+        blend is a linear ramp rather than a hard cut. Encode could cut hard because
+        its output feeds 35 more denoising steps that wash the difference out; a
+        decode is the last operation before the user sees the frame, so a hard cut
+        would put a visible line there.
+        """
+        import torch.nn.functional as F
+        C, lat_f, lh, lw = latent.shape
+        if lh * lw <= max_latent_per_tile:
+            return self.wan.vae.decode([latent])[0]
+
+        sh, sw = self.vae_stride[1], self.vae_stride[2]
+        # Derive the split from max_latent_per_tile rather than hard-coding it, or the
+        # threshold and the tile count disagree -- which silently produced a 1x1
+        # "split" (i.e. no split at all) when the caller lowered the threshold.
+        # Grow the grid until each tile is under budget, keeping tiles near-square.
+        n_h = n_w = 1
+        while (lh // n_h) * (lw // n_w) > max_latent_per_tile:
+            if lh / n_h >= lw / n_w:
+                n_h += 1
+            else:
+                n_w += 1
+        th, tw = lh // n_h, lw // n_w
+        logger.info(f"VAE decode tiled: latent {lh}x{lw} -> {n_h}x{n_w} tiles of "
+                    f"{th}x{tw} (+{overlap} latent overlap, linear blend)")
+
+        out = None
+        weight = None
+        for i in range(n_h):
+            for j in range(n_w):
+                top, left = i * th, j * tw
+                bot = lh if i == n_h - 1 else top + th
+                right = lw if j == n_w - 1 else left + tw
+                pt, pl = max(0, top - overlap), max(0, left - overlap)
+                pb, pr = min(lh, bot + overlap), min(lw, right + overlap)
+
+                dec = self.wan.vae.decode([latent[:, :, pt:pb, pl:pr]])[0]
+                dc, df, dh, dw = dec.shape
+                if out is None:
+                    out = torch.zeros((dc, df, lh * sh, lw * sw),
+                                      device=dec.device, dtype=torch.float32)
+                    weight = torch.zeros((1, 1, lh * sh, lw * sw),
+                                         device=dec.device, dtype=torch.float32)
+                # Linear ramp over the overlapped margin only; interior weight 1.
+                wmap = torch.ones((1, 1, dh, dw), device=dec.device, dtype=torch.float32)
+                ramp_t, ramp_l = (top - pt) * sh, (left - pl) * sw
+                ramp_b, ramp_r = (pb - bot) * sh, (pr - right) * sw
+                if ramp_t:
+                    wmap[:, :, :ramp_t, :] *= torch.linspace(
+                        0, 1, ramp_t, device=dec.device).view(1, 1, -1, 1)
+                if ramp_b:
+                    wmap[:, :, dh - ramp_b:, :] *= torch.linspace(
+                        1, 0, ramp_b, device=dec.device).view(1, 1, -1, 1)
+                if ramp_l:
+                    wmap[:, :, :, :ramp_l] *= torch.linspace(
+                        0, 1, ramp_l, device=dec.device).view(1, 1, 1, -1)
+                if ramp_r:
+                    wmap[:, :, :, dw - ramp_r:] *= torch.linspace(
+                        1, 0, ramp_r, device=dec.device).view(1, 1, 1, -1)
+
+                out[:, :, pt * sh:pb * sh, pl * sw:pr * sw] += dec.float() * wmap
+                weight[:, :, pt * sh:pb * sh, pl * sw:pr * sw] += wmap
+                del dec, wmap
+                torch.cuda.empty_cache()
+        return (out / weight.clamp_min(1e-8)).clamp_(-1, 1)
 
     # ------------------------------------------------------------- denoise loop
     def denoise(
