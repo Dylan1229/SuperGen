@@ -320,7 +320,32 @@ def main():
     pipe.clip.model.to(dev)
     ctx = pipe.text_encoder([a.prompt], dev)
     ctx_null = pipe.text_encoder([a.negative_prompt or cfg.sample_neg_prompt], dev)
+    # CLIP visual features. Wan feeds ONE feature of the whole image to the model
+    # (`image2video.py:236`), which is right for a single-frame canvas but wrong for
+    # tiles: a tile holding nothing but grass still gets told "a lion is roaring", and
+    # it obliges -- that is the spurious small lion in
+    # results/P1-5_backbones/ARTIFACTS.md. Hunyuan has no CLIP branch at all and shows
+    # no such artifact at 4K, which is what isolated this as the cause.
+    #
+    # So compute one feature per tile, from that tile's crop of the input image. The
+    # crops are in latent units scaled by the VAE stride; CLIP resizes internally
+    # (`clip.py:527`), so an off-square crop is fine.
+    clip_per_tile = os.environ.get("WAN_CLIP_PER_TILE", "1") == "1"
     clip_context = pipe.clip.visual([img_tensor[:, None, :, :]])
+    clip_tile_cache = {}
+    if clip_per_tile:
+        vs_h, vs_w = cfg.vae_stride[1], cfg.vae_stride[2]
+        win_h_px, win_w_px = 90 * vs_h, 160 * vs_w
+        for top_lat in range(0, lat_h, 90):
+            for left_lat in range(0, lat_w, 160):
+                t_px, l_px = top_lat * vs_h, left_lat * vs_w
+                crop = img_tensor[:, t_px:t_px + win_h_px, l_px:l_px + win_w_px]
+                if crop.shape[1] < 8 or crop.shape[2] < 8:
+                    continue
+                clip_tile_cache[(top_lat, left_lat)] = pipe.clip.visual(
+                    [crop[:, None, :, :]])
+        logger.info(f"per-tile CLIP features: {len(clip_tile_cache)} tiles "
+                    f"(set WAN_CLIP_PER_TILE=0 for the whole-image feature)")
     if a.offload_model:
         # Free them again; the tile loop only needs the DiT and the VAE.
         pipe.text_encoder.model.cpu()
@@ -360,6 +385,7 @@ def main():
                    * (win_lat_w // cfg.patch_size[2])
     arg_c = {"context": [ctx[0]], "clip_fea": clip_context, "seq_len": tile_seq_len}
     arg_null = {"context": ctx_null, "clip_fea": clip_context, "seq_len": tile_seq_len}
+    stage2.clip_tile_cache = clip_tile_cache if clip_per_tile else None
     logger.info(f"per-tile seq_len={tile_seq_len}")
 
     t_s2 = time.time()

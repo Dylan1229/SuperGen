@@ -82,6 +82,10 @@ class WanTiledStage2:
         self.patch_size = self.cfg.patch_size       # (1, 2, 2)
         self._rope = None
         self.cache = None
+        # {(top_lat, left_lat): clip_feature} -- per-tile CLIP visual features, so a
+        # tile is conditioned on its own crop of the input image rather than on the
+        # whole scene. None keeps Wan's original whole-image behaviour.
+        self.clip_tile_cache = None
 
     # ------------------------------------------------------------------ geometry
     def latent_shape(self, height: int, width: int, frames: int):
@@ -124,6 +128,23 @@ class WanTiledStage2:
         logger.info(f"Wan region-aware cache: {num_tiles} tiles, thresh={thresh}, "
                     f"ret_steps={ret_steps}")
         return self.cache
+
+    def _clip_for_tile(self, top: int, left: int):
+        """The CLIP feature for the tile whose top-left latent corner is (top, left).
+
+        Shifting moves tiles off the 90x160 grid the cache was built on, so snap to the
+        nearest cached corner rather than requiring an exact hit -- recomputing CLIP per
+        step would cost a forward pass per tile per step for a feature that barely
+        changes under a 5-10 latent shift.
+        """
+        if not self.clip_tile_cache:
+            return None
+        key = (top - top % 90, left - left % 160)
+        hit = self.clip_tile_cache.get(key)
+        if hit is not None:
+            return hit
+        return min(self.clip_tile_cache.items(),
+                   key=lambda kv: abs(kv[0][0] - top) + abs(kv[0][1] - left))[1]
 
     # ------------------------------------------------------------------- upscale
     def upscale_pixel(self, latent: torch.Tensor, target_h: int, target_w: int) -> torch.Tensor:
@@ -445,6 +466,10 @@ class WanTiledStage2:
                         y_tile = y_tile.squeeze(0).permute(1, 0, 2, 3).contiguous()
                         kw_c["y"] = [y_tile]
                         kw_null["y"] = [y_tile]
+                    ct = self._clip_for_tile(top, left)
+                    if ct is not None:
+                        kw_c["clip_fea"] = ct
+                        kw_null["clip_fea"] = ct
                     with autocast_ctx, torch.no_grad():
                         pred_c = self.wan.model(model_in, t=ts, **kw_c)[0]
                         pred_u = self.wan.model(model_in, t=ts, **kw_null)[0]
@@ -531,6 +556,10 @@ class WanTiledStage2:
                         yt = y_tile.squeeze(0).permute(1, 0, 2, 3).contiguous()
                         kw_c["y"] = [yt]
                         kw_null["y"] = [yt]
+                    ct = self._clip_for_tile(top, left)
+                    if ct is not None:
+                        kw_c["clip_fea"] = ct
+                        kw_null["clip_fea"] = ct
                     with autocast_ctx, torch.no_grad():
                         pred_c = self.wan.model(model_in, t=ts, **kw_c)[0]
                         pred_u = self.wan.model(model_in, t=ts, **kw_null)[0]

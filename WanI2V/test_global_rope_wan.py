@@ -158,7 +158,13 @@ def test_ntk():
       * canvas == trained reproduces upstream exactly: the guard that the new mode is
         a generalisation rather than a different algorithm.
     """
+    import os
+    import sys
     import torch
+    # main() sets these up; do it here too so this test is runnable on its own.
+    for pth in (os.path.dirname(os.path.abspath(__file__)), "/home/ubuntu/repo/Wan2.1"):
+        if pth not in sys.path:
+            sys.path.insert(0, pth)
     from global_rope_wan import _ntk_alpha, _ntk_table, rope_apply_at_offset
     from wan.modules.model import rope_params, rope_apply
 
