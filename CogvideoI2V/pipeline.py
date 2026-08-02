@@ -211,15 +211,26 @@ def generate_video(
     # say those were "chosen based on experimentation" at 720x480. Applied at 4K
     # that leaves decode boundaries every 200 px / 288 px.
     #
-    # Widening the overlap to 1/3 pushes them to 160 px / 240 px with a longer
-    # blend ramp (diffusers blends linearly across the overlap), at no extra
-    # denoising cost -- decode is a single pass either way.
-    _vae_overlap = float(os.environ.get("VAE_TILE_OVERLAP", "0.333"))
-    pipe.vae.enable_tiling(
-        tile_overlap_factor_height=_vae_overlap,
-        tile_overlap_factor_width=_vae_overlap,
-    )
-    logging.info(f"VAE tiling overlap factor = {_vae_overlap}")
+    # NOT widening it, despite the above. diffusers' CogVideoX VAE tiling is not
+    # size-invariant in the overlap factor, in BOTH directions -- measured at
+    # 720x1280:
+    #     encode, overlap 1/6,1/5 (default) -> latent 90x160   correct
+    #     encode, overlap 1/3              -> latent 94x165   crashes Stage 1 with
+    #                                                         "Expected 94 but got 90"
+    #     decode, overlap 1/3              -> pixels 724x1285  instead of 720x1280
+    #
+    # So the wider overlap cannot be used here at all; it is not a matter of applying
+    # it to decode only. The Wan path still uses a 1/3-equivalent overlap because its
+    # tiling is ours (`WanI2V/tiled_stage2.py`) and writes into a fixed-size output
+    # buffer, so the geometry is guaranteed by construction rather than by the
+    # library's rounding.
+    #
+    # The 4K decode-boundary concern that motivated this is therefore still open for
+    # CogVideoX. It has not shown up as a visible seam in any CogVideoX output,
+    # unlike the shift-cycle bug, so it stays a note rather than a fix.
+    pipe.vae.enable_tiling()
+    logging.info("VAE tiling: diffusers defaults (its tiled encode/decode change "
+                 "output size when the overlap factor changes)")
 
     # Set up generator for reproducibility
     generator = torch.Generator(device="cuda")
