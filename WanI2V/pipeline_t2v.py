@@ -195,9 +195,12 @@ def main():
                             dist_manager=dist_manager)
 
     s1_latent = None
+    t_s1 = time.time()
+    reused_s1 = False
     if a.stage1_latents_path and os.path.isfile(a.stage1_latents_path):
         s1_latent = torch.load(a.stage1_latents_path, map_location=dev,
                                weights_only=False)
+        reused_s1 = True
         logger.info(f"reused Stage-1 latents {tuple(s1_latent.shape)}")
 
     if s1_latent is None:
@@ -223,6 +226,10 @@ def main():
             del s1_video
             torch.cuda.empty_cache()
         s1_latent = broadcast_stage1(s1_latent, dist_manager, cfg, a, device_id)
+
+    # See pipeline.py: the third bar of the breakdown figure. REUSED means it was loaded, not run.
+    logger.info(f"First Stage Running time: {time.time() - t_s1:.4f} seconds"
+                f"{' (REUSED from cache, not generated)' if reused_s1 else ''}")
 
     # ---------------------------------------------------------------- Stage 2
     t_up = time.time()
@@ -280,7 +287,7 @@ def main():
         renoised, timesteps2, sched, arg_c, arg_null,
         guide_scale=a.guidance_scale,
         shift_timesteps=list(range(a.upscale_res_steps)),
-        seed_g=gen, enable_cache=a.enable_cache,
+        seed_g=gen, enable_cache=a.enable_cache, cache_thresh=a.cache_thresh,
         y_canvas=None,          # T2V: no image conditioning to slice
     )
     logger.info(f"Second Stage Running time: {time.time() - t_s2} seconds")

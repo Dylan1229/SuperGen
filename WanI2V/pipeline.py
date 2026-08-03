@@ -226,9 +226,12 @@ def main():
                             dist_manager=dist_manager)
 
     s1_latent = None
+    t_s1 = time.time()
+    reused_s1 = False
     if a.stage1_latents_path and os.path.isfile(a.stage1_latents_path):
         s1_latent = torch.load(a.stage1_latents_path, map_location=f"cuda:{device_id}",
                                weights_only=False)
+        reused_s1 = True
         logger.info(f"reused Stage-1 latents from {a.stage1_latents_path} "
                     f"{tuple(s1_latent.shape)}")
 
@@ -261,6 +264,13 @@ def main():
             del s1_video
             torch.cuda.empty_cache()
         s1_latent = broadcast_stage1(s1_latent, dist_manager, cfg, a, device_id)
+
+    # The breakdown figure splits the run three ways (Stage 1 / Upscale / Stage 2), and this was
+    # the missing third: the upscale and Stage-2 timers were already here, so a Wan row could only
+    # be built by subtracting from the wall time. Flagged as REUSED when the latent came off disk,
+    # because then it is a load, not a generation, and must not go in the Stage-1 bar.
+    logger.info(f"First Stage Running time: {time.time() - t_s1:.4f} seconds"
+                f"{' (REUSED from cache, not generated)' if reused_s1 else ''}")
 
     # ---------------------------------------------------------------- Stage 2
     t_up = time.time()
@@ -393,7 +403,7 @@ def main():
         renoised, timesteps2, sched2, arg_c, arg_null,
         guide_scale=a.guidance_scale,
         shift_timesteps=list(range(a.upscale_res_steps)),
-        seed_g=gen, enable_cache=a.enable_cache,
+        seed_g=gen, enable_cache=a.enable_cache, cache_thresh=a.cache_thresh,
         y_canvas=y_canvas,
     )
     logger.info(f"Second Stage Running time: {time.time() - t_s2} seconds")

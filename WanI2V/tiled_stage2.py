@@ -348,6 +348,7 @@ class WanTiledStage2:
         shift_timesteps: Optional[List[int]] = None,
         seed_g=None,
         enable_cache: bool = False,
+        cache_thresh: float = 0.09,
         y_canvas: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Stage-2 loop: for each step, for each tile, predict and fuse.
@@ -390,8 +391,13 @@ class WanTiledStage2:
                 latent_tensor=y_canvas.permute(1, 0, 2, 3).unsqueeze(0).contiguous())
 
         if enable_cache and self.cache is None:
+            # From the caller, not hard-coded. It WAS hard-coded to 0.09, which made
+            # --cache_thresh a dead flag: a threshold sweep over 0.09/0.15/0.25 produced three
+            # byte-identical skip rates (11.43% each) and three identical Stage-2 times, which is
+            # what exposed it. Any Wan "w/ cache" number measured before this is at 0.09 whatever
+            # the command line said.
             self.setup_cache(canvas.torch_latent.shape, num_tiles,
-                             len(timesteps), thresh=0.09, dtype=latent.dtype)
+                             len(timesteps), thresh=cache_thresh, dtype=latent.dtype)
 
         # ------------------------------------------------------- tile parallelism
         # 4K is 9 tiles and 2K is 4, so one rank per tile is the natural split and

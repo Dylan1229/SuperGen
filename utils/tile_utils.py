@@ -1,3 +1,5 @@
+import os
+
 import torch
 from typing import Tuple, Dict, Any, TYPE_CHECKING
 import logging
@@ -376,8 +378,32 @@ class SlidingWindowConfig:
         Returns:
             Tuple of (window_height, window_width)
         """
+        # An explicit override, so the tile-count ablation is expressible at all. Without it the
+        # window is a pure function of the resolution and the supplementary figure that sweeps tile
+        # configurations cannot be produced.
+        #
+        #   TILE_SIZE=90x160   one window size for every resolution
+        #
+        # In LATENT units, matching RESOLUTION_TO_WINDOW_SIZE. Rejected rather than rounded when it
+        # does not divide the canvas: a ragged last tile would silently change what is being
+        # measured, and the whole point of the ablation is that only the tile count varies.
+        override = os.environ.get("TILE_SIZE", "").strip()
+        if override:
+            try:
+                wh, ww = (int(v) for v in override.lower().split("x"))
+            except ValueError:
+                raise ValueError(f"TILE_SIZE must look like 90x160, got {override!r}")
+            if height % wh or width % ww:
+                raise ValueError(
+                    f"TILE_SIZE={override} does not tile a {height}x{width} latent canvas "
+                    f"({height}%{wh}={height % wh}, {width}%{ww}={width % ww}). A ragged tile "
+                    f"would change more than the tile count.")
+            logger.info(f"Using TILE_SIZE override: ({wh}, {ww}) -> "
+                        f"{(height // wh) * (width // ww)} tiles on a {height}x{width} canvas")
+            return (wh, ww)
+
         resolution_key = (height, width)
-        
+
         if resolution_key in cls.RESOLUTION_TO_WINDOW_SIZE:
             window_size = cls.RESOLUTION_TO_WINDOW_SIZE[resolution_key]
             logger.info(f"Using predefined window_size: {window_size} for latent space resolution {height}x{width}")
