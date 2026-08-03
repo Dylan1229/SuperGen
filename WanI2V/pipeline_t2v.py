@@ -61,9 +61,23 @@ def setup_sequence_parallel(ulysses_size, ring_size, cfg):
     """
     if ulysses_size <= 1 and ring_size <= 1:
         return False
+    import os
     import torch.distributed as dist
+    if "RANK" not in os.environ:
+        raise SystemExit("sequence parallelism needs torchrun (RANK is unset)")
     if not dist.is_initialized():
-        raise SystemExit("sequence parallelism needs torchrun (no process group)")
+        # There is a circular dependency to break here: xfuser's group setup needs a process
+        # group, but the process group was created inside setup_distributed(), which in turn needs
+        # sp_size to know how to partition tiles. So SP creates the group itself when it is first,
+        # and setup_distributed() then finds it already initialised.
+        #
+        # Getting this wrong is what killed every SP run: setup_sequence_parallel ran first, found
+        # no group, and exited with "sequence parallelism needs torchrun" -- on all 24 rc=1 cells.
+        import datetime
+        import torch
+        torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", 0)))
+        dist.init_process_group(backend="nccl",
+                                timeout=datetime.timedelta(minutes=60))
     world = dist.get_world_size()
     if ulysses_size * ring_size != world:
         raise SystemExit(f"ulysses_size({ulysses_size}) * ring_size({ring_size}) != "
