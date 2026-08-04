@@ -35,7 +35,13 @@ import time
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))              # SuperGen/
 sys.path.insert(0, _HERE)
-sys.path.insert(0, "/home/ubuntu/repo/Wan2.1")
+# The Wan runtime, which is a separate checkout. Overridable because its location is
+# site-specific: WAN_REPO if set, else a sibling of this repo, else the path used on our host.
+_WAN = os.environ.get("WAN_REPO") or os.path.join(
+    os.path.dirname(os.path.dirname(_HERE)), "Wan2.1")
+if not os.path.isdir(_WAN):
+    _WAN = "/home/ubuntu/repo/Wan2.1"
+sys.path.insert(0, _WAN)
 
 import torch
 

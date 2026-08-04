@@ -162,7 +162,8 @@ def test_ntk():
     import sys
     import torch
     # main() sets these up; do it here too so this test is runnable on its own.
-    for pth in (os.path.dirname(os.path.abspath(__file__)), "/home/ubuntu/repo/Wan2.1"):
+    for pth in (os.path.dirname(os.path.abspath(__file__)),
+                os.environ.get("WAN_REPO", "/home/ubuntu/repo/Wan2.1")):
         if pth not in sys.path:
             sys.path.insert(0, pth)
     from global_rope_wan import _ntk_alpha, _ntk_table, rope_apply_at_offset

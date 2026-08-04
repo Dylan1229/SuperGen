@@ -7,3 +7,5 @@ __pycache__
 test
 /*.log
 /*.err
+# Local checkpoint symlink: site-specific, and the target is a multi-GB download.
+HunyuanVideoI2V/ckpts

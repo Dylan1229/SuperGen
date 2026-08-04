@@ -22,7 +22,7 @@ import torch
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)
-sys.path.insert(0, "/home/ubuntu/repo/Wan2.1")
+sys.path.insert(0, os.environ.get("WAN_REPO", "/home/ubuntu/repo/Wan2.1"))
 
 CKPT = os.environ.get("WAN_CKPT", "/home/ubuntu/ckpts/Wan2.1-I2V-14B-720P")
 H, W, FRAMES = 1440, 2560, 9      # 2K, few frames: this tests space, not time
